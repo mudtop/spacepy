@@ -2211,24 +2211,10 @@ class Shell(IdlFile):
         if 'time' not in self.attrs: self.attrs['time'] = time
         if 'iter' not in self.attrs: self.attrs['iter'] = i_iter
 
-		for key in list(self.keys()):
-			if key not in ['grid', 'r', 'lon', 'lat']:
-				shape = self[key].shape #np.squeeze
-				if 1 not in shape:
-					pass
-				else:
-					if shape[0] and shape[1] == 1:
-						self[key] = self[key][0,0,:]
-					elif shape[0] and shape[2] == 1:
-						self[key] = self[key][0,:,0]
-				 	elif shape[1] and shape[2] ==1:
-				 		self[key] = self[key][:,0,0]
-					elif shape[0] == 1:
-						self[key] = self[key][0,:,:]
-					elif shape[1] == 1:
-						self[key] = self[key][:,0,:]
-					elif shape[2] == 1:
-						self[key] = self[key][:,:,0]
+        for key in list(self.keys()):
+                if key not in ['grid', 'r', 'lon', 'lat']:
+                        if 1 in self[key].shape:
+                                self[key] = np.squeeze(self[key])
 
 class ShellSlice(IdlFile):
     '''
