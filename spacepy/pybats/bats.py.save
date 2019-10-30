@@ -1,4 +1,4 @@
-'''
+_'''
 A PyBats module for handling input, output, and visualization of 
 binary SWMF output files taylored to BATS-R-US-type data.
 
@@ -2193,7 +2193,7 @@ class Bats2d(IdlFile):
 
 
 class ShellSlice(IdlFile):
-    '''
+ e   '''
     Shell slices are special MHD outputs where the domain is interpolated
     onto a spherical slice in 1, 2, or 3 dimensions.  Some examples
     include radial or azimuthal lines, spherical shells, or 3D wedges.

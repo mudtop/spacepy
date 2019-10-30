@@ -188,6 +188,7 @@ class BatsLog(LogFile):
             self.obs_sym = kt.fetch('sym', stime, etime)
         # Warn on failure:
         except BaseException as args:
+
             raise Warning('Failed to fetch Kyoto Dst: ', args)
             return False
 
