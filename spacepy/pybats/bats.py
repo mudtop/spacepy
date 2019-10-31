@@ -2246,67 +2246,66 @@ class Shell(IdlFile):
             else:
                 if filled:
                             contour = ax.contourf
-                        else:
+                else:
                             contour = ax.contour
 
-                    if dolog:
-                        levs: = np.power(10, np.linspace(np.log10(zlim[0]),
+                if dolog:
+                        levs = np.power(10, np.linspace(np.log10(zlim[0]),
                                          np.log10(zlim[1]), nlev))
                         z = np.where(self[value]>zlim[0], self[value], 1.01*zlim[0])
                         norm = LogNorm()
                         ticks = Loglocator()
                         fmt = LogFormatterMathtext()
-                    else:
+                else:
                         levs = np.linspace(zlim[0], zlim[1], nlev)
                         z = self[value]
                         norm = None
                         ticks = None
                         fmt = None
 
-                    cont = contour(self[dim1], self[dim2], np.array(z,
-                                    levs, *args, norm = norm, **kwargs))
+                cont = contour(self[dim1], self[dim2], np.array(z, levs, *args, norm = norm, **kwargs))
 
-                    if add_cbar:
+                if add_cbar:
                         cbar=plt.colorbar(cont, ax=ax, ticks=ticks, format=fmt, pad=0.01)
                         if clabel==None:
                             clabel="%s (%s)" % (value, self[value].attrs['units'])
                         cbar.set_label(clabel)
-                    else:
+                else:
                         cbar=None # Need to return something, even if none.
 
                     # Set title, labels, axis ranges (use defaults where applicable.)
-                    if title: ax.set_title(title)
-                    if ylabel==None: ylabel='%s ($R_{E}$)'%dim2.upper()
-                    if xlabel==None: xlabel='%s ($R_{E}$)'%dim1.upper()
-                    ax.set_ylabel(ylabel); ax.set_xlabel(xlabel)
-                    try:
-                        assert len(xlim)==2
-                        assert isinstance(xlim[0], numbers.Number)
-                        assert isinstance(xlim[1], numbers.Number)
-                    except (TypeError, AssertionError):
-                        if xlim is not None:
-                            raise ValueError('add_contour: xlim must be list- or array-like and have 2 elements')
-                    else:
-                        ax.set_xlim(xlim)
-                    try:
+                if title: ax.set_title(title)
+                if ylabel==None: ylabel='%s ($R_{E}$)'%dim2.upper()
+                if xlabel==None: xlabel='%s ($R_{E}$)'%dim1.upper()
+                ax.set_ylabel(ylabel); ax.set_xlabel(xlabel)
+                try:
+                    assert len(xlim)==2
+                    assert isinstance(xlim[0], numbers.Number)
+                    assert isinstance(xlim[1], numbers.Number)
+                except (TypeError, AssertionError):
+                    if xlim is not None:
+                        raise ValueError('add_contour: xlim must be list- or array-like and have 2 elements')
+                else:
+                    ax.set_xlim(xlim)
+                try:
                         assert len(ylim)==2
                         assert isinstance(ylim[0], numbers.Number)
                         assert isinstance(ylim[1], numbers.Number)
-                    except (TypeError, AssertionError):
+                except (TypeError, AssertionError):
                         if ylim is not None:
                             raise ValueError('add_contour: ylim must be list- or array-like and have 2 elements')
-                    else:
+                else:
                         ax.set_ylim(ylim)
 
                     # Add body/planet.  Determine where the sun is first.
-                    if dim1=='x':
-                        ang=0.0
-                    elif dim2=='x':
-                        ang=90.0
-                    else: ang=0.0
-                    if add_body: self.add_body(ax, ang=ang)
+                if dim1=='x':
+                    ang=0.0
+                elif dim2=='x':
+                    ang=90.0
+                else: ang=0.0
+                if add_body: self.add_body(ax, ang=ang)
 
-                    return fig, ax, cont, cbar
+                return fig, ax, cont, cbar
 class ShellSlice(IdlFile):
     '''
     Shell slices are special MHD outputs where the domain is interpolated
