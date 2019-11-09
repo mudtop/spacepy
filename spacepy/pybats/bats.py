@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 '''
 A PyBats module for handling input, output, and visualization of
 binary SWMF output files taylored to BATS-R-US-type data.
@@ -3575,7 +3574,7 @@ class VirtSat(LogFile):
             add_body(ax, rad=rbody, add_night=('X' in plane.upper()) )
 
         return fig, ax
-=======
+
 '''
 A PyBats module for handling input, output, and visualization of
 binary SWMF output files taylored to BATS-R-US-type data.
@@ -7266,4 +7265,4 @@ class VirtSat(LogFile):
             add_body(ax, rad=rbody, add_night=('X' in plane.upper()) )
 
         return fig, ax
->>>>>>> f2e0e60324b9d9dad6e337ee4f27707f9f3ebb54
+
