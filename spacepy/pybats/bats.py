@@ -2193,7 +2193,6 @@ class Bats2d(IdlFile):
 
 class Shell(IdlFile):
     '''
-    A child class of :class:`~pybats.IdlFile` taylored to 3d shell slices of
     BATS-R-US ouput.
 
     On file init begins with 3d matrices for each non-coordinate key in self.keys()
