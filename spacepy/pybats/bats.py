@@ -2215,97 +2215,157 @@ class Shell(IdlFile):
             if key not in ['grid', 'r', 'lon', 'lat']:
                 if 1 in self[key].shape:
                     self[key] = np.squeeze(self[key])
+    
+    def add_planet(self, ax=None, rad=1.0, ang=0.0, **extra_kwargs):
+        '''
+        Creates a circle of radius=self.attrs['rbody'] and returns the
+        MatPlotLib Ellipse patch object for plotting.  If an axis is specified
+        using the "ax" keyword, the patch is added to the plot.
 
-        def add_contour(self, dim1, dim2, value, nlev = 30, target = None, loc = 111,
-                        title = None, xlabel = None, ylabel = None, ylim= None,
-                        xlim = None, add_cbar = False, clabel = None,
-                        filled = True, add_body = True, dolog = False, zlim = None,
-                        *args, **kwargs):
-            '''
-            Docstring.
-            '''
-            import numbers
-            import matplotlib.pyplot as plt
-            from matplotlib.colors import (LogNorm, Normalize)
-            from matplotlib.ticker import (LogLocator, LogFormatter,
+        Unlike the add_body method, the circle is colored half white (dayside)
+        and half black (nightside) to coincide with the direction of the
+        sun. Additionally, because the size of the planet is not intrinsically
+        known to the MHD file, the kwarg "rad", defaulting to 1.0, sets the
+        size of the planet.
+
+        Extra keywords are handed to the Ellipse generator function.
+        '''
+
+        from matplotlib.patches import Circle, Wedge
+
+        if 'rbody' not in self.attrs:
+            raise KeyError('rbody not found in self.attrs!')
+
+        body = Circle((0,0), rad, fc='w', zorder=1000, **extra_kwargs)
+        arch = Wedge((0,0), rad, 90.+ang, -90.+ang, fc='k',
+                     zorder=1001, **extra_kwargs)
+
+        if ax != None:
+            ax.add_artist(body)
+            ax.add_artist(arch)
+
+        return body, arch
+
+    def add_body(self, ax=None, facecolor='lightgrey', DoPlanet=True, ang=0.0,
+                 **extra_kwargs):
+        '''
+        Creates a circle of radius=self.attrs['rbody'] and returns the
+        MatPlotLib Ellipse patch object for plotting.  If an axis is specified
+        using the "ax" keyword, the patch is added to the plot.
+        Default color is light grey; extra keywords are handed to the Ellipse
+        generator function.
+
+        Because the body is rarely the size of the planet at the center of
+        the modeling domain, add_planet is automatically called.  This can
+        be negated by using the DoPlanet kwarg.
+        '''
+        from matplotlib.patches import Ellipse
+
+        if 'rbody' not in self.attrs:
+            raise KeyError('rbody not found in self.attrs!')
+
+        dbody = 2.0 * self.attrs['rbody']
+        body = Ellipse((0,0),dbody,dbody,facecolor=facecolor, zorder=999,
+                       **extra_kwargs)
+
+        if DoPlanet:
+            self.add_planet(ax, ang=ang)
+        if ax != None:
+            ax.add_artist(body)
+            
+    def add_contour(self, dim1, dim2, value, nlev = 30, target = None, loc = 111,
+        title = None, xlabel = None, ylabel = None, ylim= None,
+        xlim = None, add_cbar = False, clabel = None,
+        filled = True, add_body = True, dolog = False, zlim = None,
+        *args, **kwargs):
+        '''
+        Most Usefull Docstring ever right?
+        '''
+        import numbers
+        from numpy import meshgrid, array
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import (LogNorm, Normalize)
+        from matplotlib.ticker import (LogLocator, LogFormatter,
                                            LogFormatterMathtext, MultipleLocator)
 
-            fig, ax = set_target(target, figsize = (10,10), loc = loc)
+        fig, ax = set_target(target, figsize = (10,10), loc = loc)
 
-            if zlim is None:
-                zlim = [0,0]
-                zlim[0] = self[value].min(); zlim[1] = self[value].max()
-                if dolog and zlim[0] <= 0:
-                    zlim[0] = np.min( [0.0001, zlim[1]/1000.0] )
-
-            if self['grid'].attrs['gtype'] != 'Regular':
-                if filled:
-                    contour = ax.tricontourf
-                else:
-                    contour = ax.tricontour
+        if zlim is None:
+            zlim = [0,0]
+            zlim[0] = self[value].min(); zlim[1] = self[value].max()
+        if dolog and zlim[0] <= 0:
+            zlim[0] = np.min( [0.0001, zlim[1]/1000.0] )
+ 
+        if self['grid'].attrs['gtype'] != 'Regular':
+            if filled:
+                contour = ax.tricontourf
             else:
-                if filled:
-                            contour = ax.contourf
-                else:
-                            contour = ax.contour
+                contour = ax.tricontour
+        else:
+            if filled:
+                contour = ax.contourf
+            else:
+                contour = ax.contour
 
-                if dolog:
-                        levs = np.power(10, np.linspace(np.log10(zlim[0]),
-                                         np.log10(zlim[1]), nlev))
-                        z = np.where(self[value]>zlim[0], self[value], 1.01*zlim[0])
-                        norm = LogNorm()
-                        ticks = Loglocator()
-                        fmt = LogFormatterMathtext()
-                else:
-                        levs = np.linspace(zlim[0], zlim[1], nlev)
-                        z = self[value]
-                        norm = None
-                        ticks = None
-                        fmt = None
+        if dolog:
+            levs = np.power(10, np.linspace(np.log10(zlim[0]),
+            np.log10(zlim[1]), nlev))
+            z = np.where(self[value]>zlim[0], self[value], 1.01*zlim[0])
+            norm = LogNorm()
+            ticks = LogLocator()
+            fmt = LogFormatterMathtext()
+        else:
+            levs = np.linspace(zlim[0], zlim[1], nlev)
+            z = self[value]
+            norm = None
+            ticks = None
+            fmt = None
 
-                cont = contour(self[dim1], self[dim2], np.array(z, levs, *args, norm = norm, **kwargs))
+        X, Y = meshgrid(array(self[dim1]), array(self[dim2]))
+        cont = contour(X, Y , np.transpose(array(z)), levs, *args, norm = norm, **kwargs)
 
-                if add_cbar:
-                        cbar=plt.colorbar(cont, ax=ax, ticks=ticks, format=fmt, pad=0.01)
-                        if clabel==None:
-                            clabel="%s (%s)" % (value, self[value].attrs['units'])
-                        cbar.set_label(clabel)
-                else:
-                        cbar=None # Need to return something, even if none.
+        if add_cbar:
+            cbar=plt.colorbar(cont, ax=ax, ticks=ticks, format=fmt, pad=0.01)
+            if clabel==None:
+                clabel="%s (%s)" % (value, self[value].attrs['units'])
+                cbar.set_label(clabel)
+        else:
+            cbar=None # Need to return something, even if none.
 
-                    # Set title, labels, axis ranges (use defaults where applicable.)
-                if title: ax.set_title(title)
-                if ylabel==None: ylabel='%s ($R_{E}$)'%dim2.upper()
-                if xlabel==None: xlabel='%s ($R_{E}$)'%dim1.upper()
-                ax.set_ylabel(ylabel); ax.set_xlabel(xlabel)
-                try:
-                    assert len(xlim)==2
-                    assert isinstance(xlim[0], numbers.Number)
-                    assert isinstance(xlim[1], numbers.Number)
-                except (TypeError, AssertionError):
-                    if xlim is not None:
-                        raise ValueError('add_contour: xlim must be list- or array-like and have 2 elements')
-                else:
-                    ax.set_xlim(xlim)
-                try:
-                        assert len(ylim)==2
-                        assert isinstance(ylim[0], numbers.Number)
-                        assert isinstance(ylim[1], numbers.Number)
-                except (TypeError, AssertionError):
-                        if ylim is not None:
-                            raise ValueError('add_contour: ylim must be list- or array-like and have 2 elements')
-                else:
-                        ax.set_ylim(ylim)
+        # Set title, labels, axis ranges (use defaults where applicable.)
+        if title: ax.set_title(title)
+        if ylabel==None: ylabel='%s ($R_{E}$)'%dim2.upper()
+        if xlabel==None: xlabel='%s ($R_{E}$)'%dim1.upper()
+        ax.set_ylabel(ylabel); ax.set_xlabel(xlabel)
+        try:
+            assert len(xlim)==2
+            assert isinstance(xlim[0], numbers.Number)
+            assert isinstance(xlim[1], numbers.Number)
+        except (TypeError, AssertionError):
+            if xlim is not None:
+                raise ValueError('add_contour: xlim must be list- or array-like and have 2 elements')
+            else:
+                ax.set_xlim(xlim)
+        try:
+            assert len(ylim)==2
+            assert isinstance(ylim[0], numbers.Number)
+            assert isinstance(ylim[1], numbers.Number)
+        except (TypeError, AssertionError):
+            if ylim is not None:
+                raise ValueError('add_contour: ylim must be list- or array-like and have 2 elements')
+            else:
+                ax.set_ylim(ylim)
 
-                    # Add body/planet.  Determine where the sun is first.
-                if dim1=='x':
-                    ang=0.0
-                elif dim2=='x':
-                    ang=90.0
-                else: ang=0.0
-                if add_body: self.add_body(ax, ang=ang)
+        # Add body/planet.  Determine where the sun is first.
+        if dim1=='x':
+           ang=0.0
+        elif dim2=='x':
+            ang=90.0
+        else: ang=0.0
+        if add_body: self.add_body(ax, ang=ang)
 
-                return fig, ax, cont, cbar
+        return fig, ax, cont, cbar
+            
 class ShellSlice(IdlFile):
     '''
     Shell slices are special MHD outputs where the domain is interpolated
