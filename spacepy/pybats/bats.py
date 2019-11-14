@@ -2215,21 +2215,244 @@ class Shell(IdlFile):
             if key not in ['grid', 'r', 'lon', 'lat']:
                 if 1 in self[key].shape:
                     self[key] = np.squeeze(self[key])
-    
+    def calc_temp(self, units = 'eV'):
+
+        from spacepy.datamodel import dmarray
+        units = units.lower()
+
+        #Dictionary of unit conversions
+        conv = {'ev' : 6241.50935,  # nPa/cm^3 --> eV.
+                 'kev': 6.24150935,  # nPa/cm^3 --> KeV.
+                 'k'  : 72429626.47} # nPa/cm^3 --> K.
+
+        #Calc N density if not done.
+        if not 'N' in self:
+            self.calc_ndens()
+
+        #find all number density variables.
+        for key in list(self.keys()):
+            if key[-1] != 'N':
+                continue
+            if not key[:-1]+ 'p' in self:
+                continue
+            self[key[:-1]+ 't'] = dmarray(
+            conv[units] * self[key[:-1]+'p']/self[key],
+            attrs = {'units':units} )
+
+    def calc_b(self):
+        '''
+        Calculates total B-field strength using all three B components.
+        Retains units of components.  Additionally, the unit vector
+        b-hat is calculated as well.
+        '''
+        from numpy import sqrt
+
+        self['b'] = sqrt(self['bx']**2.0 + self['by']**2.0 + self['bz']**2.0)
+        self['b'].attrs={'units':self['bx'].attrs['units']}
+
+        self['bx_hat'] = self['bx'] / self['b']
+        self['by_hat'] = self['by'] / self['b']
+        self['bz_hat'] = self['bz'] / self['b']
+
+        self['bx_hat'].attrs={'units':'unitless'}
+        self['by_hat'].attrs={'units':'unitless'}
+        self['bz_hat'].attrs={'units':'unitless'}
+
+    def calc_j(self):
+        '''
+        Calculates total current density strength using all three J components.
+        Retains units of components, stores in self['j']
+        '''
+        from numpy import sqrt
+
+        self['j'] = sqrt(self['jx']**2.0 + self['jy']**2.0 + self['jz']**2.0)
+        self['j'].attrs={'units':self['jx'].attrs['units']}
+
+    def calc_E(self):
+        '''
+        Calculates the MHD electric field, -UxB.  Works for default
+        MHD units of nT and km/s; if these units are not correct, an
+        exception will be raised.  Stores E in mV/m.
+        '''
+        from copy import copy
+
+        # Some quick declarations for more readable code.
+        ux = self['ux']; uy=self['uy']; uz=self['uz']
+        bx = self['bx']; by=self['by']; bz=self['bz']
+
+        # Check units.  Should be nT(=Volt*s/m^2) and km/s.
+        if (bx.attrs['units']!='nT') or (ux.attrs['units']!='km/s'):
+            raise Exception('Incorrect units!  Should be km/s and nT.')
+
+        # Calculate; return in millivolts per meter
+        self['Ex'] = -1.0*(uy*bz - uz*by) / 1000.0
+        self['Ey'] = -1.0*(uz*bx - ux*bz) / 1000.0
+        self['Ez'] = -1.0*(ux*by - uy*bx) / 1000.0
+        self['Ex'].attrs={'units':'mV/m'}
+        self['Ey'].attrs={'units':'mV/m'}
+        self['Ez'].attrs={'units':'mV/m'}
+
+        # Total magnitude.
+        self['E'] = np.sqrt(self['Ex']**2+self['Ey']**2+self['Ez']**2)
+
+    def calc_ndens(self):
+        '''
+        Calculate number densities for each fluid.  Species mass is ascertained
+        via recognition of fluid name (e.g. OpRho is clearly oxygen).  A full
+        list of recognized fluids/species can be found by exploring the
+        dictionary *mass* found in :mod:`~spacepy.pybats.bats`.  Composition is
+        also calculated as percent of total number density.
+
+        New values are saved using the keys *speciesN* (e.g. *opN*) and
+        *speciesFrac* (e.g. *opFrac*).
+        '''
+
+        # Use shared function.
+        _calc_ndens(self)
+
+    def calc_beta(self):
+        '''
+        Calculates plasma beta (ratio of plasma to magnetic pressure,
+        indicative of who - plasma or B-field - is "in charge" with regards
+        to flow.
+        Assumes:
+        -pressure in units of nPa
+        -B in units of nT.
+        Resulting value is unitless.
+        Values where b_total = zero are set to -1.0 in the final array.
+        '''
+        from numpy import pi
+
+        if not 'b' in self:
+            self.calc_b()
+        mu_naught = 4.0E2 * pi # Mu_0 x unit conversion (nPa->Pa, nT->T)
+        temp_b = self['b']**2.0
+        temp_b[temp_b<1E-8] =  -1.0*mu_naught*self['p'][temp_b==0.0]
+        temp_beta=mu_naught*self['p']/temp_b
+        #temp_beta[self['b']<1E-9] = -1.0
+        self['beta']=temp_beta
+        self['beta'].attrs={'units':'unitless'}
+
+    def calc_jxb(self):
+        '''
+        Calculates the JxB force assuming:
+        -Units of J are uA/m2, units of B are nT.
+        Under these assumptions, the value returned is force density (nN/m^3).
+        '''
+        from numpy import sqrt
+        from spacepy.datamodel import dmarray
+
+        # Unit conversion (nT, uA, cm^-3 -> nT, A, m^-3) to nN/m^3.
+        conv = 1E-6
+        # Calculate cross product, convert units.
+        self['jbx']=dmarray( (self['jy']*self['bz']-self['jz']*self['by'])*conv,
+                             {'units':'nN/m^3'})
+        self['jby']=dmarray( (self['jz']*self['bx']-self['jx']*self['bz'])*conv,
+                             {'units':'nN/m^3'})
+        self['jbz']=dmarray( (self['jx']*self['by']-self['jy']*self['bx'])*conv,
+                             {'units':'nN/m^3'})
+        self['jb'] =dmarray( sqrt(self['jbx']**2 +
+                                  self['jby']**2 +
+                                  self['jbz']**2), {'units':'nN/m^3'})
+
+    def calc_alfven(self):
+        '''
+        Calculate the Alfven speed, B/(mu*rho)^(1/2) in km/s.  This is performed
+        for each species and the total fluid.
+        The variable is saved under key "alfven" in self.data.
+        '''
+        from numpy import sqrt, pi
+        from spacepy.datamodel import dmarray
+
+        if not 'b' in self:
+            self.calc_b()
+        #M_naught * conversion from #/cm^3 to kg/m^3
+        mu_naught = 4.0E-7 * pi * 1.6726E-27 * 1.0E6
+
+        # Get all rho-like variables.  Save in new list.
+        rho_names = []
+        for k in self:
+            if (k[-3:]) == 'rho':
+                rho_names.append(k)
+
+        # Calculate Alfven speed in km/s.  Separate step to avoid
+        # changing dictionary while looping over keys.
+        for k in rho_names:
+            self[k[:-3]+'alfven'] = dmarray(self['b']*1E-12 /
+                                            sqrt(mu_naught*self[k]),
+                                            attrs={'units':'km/s'})
+
+    def calc_utotal(self):
+        '''
+        Calculate bulk velocity magnitude: $u^2 = u_X^2 + u_Y^2 + u_Z^2$.
+        This is done on a per-fluid basis.
+        '''
+
+        from numpy import sqrt
+        from spacepy.datamodel import dmarray
+
+        species = []
+
+        # Find all species, the variable names end in "ux".
+        for k in self:
+            if (k[-2:] == 'ux') and (k[:-2]+'u' not in self) and k[-4:] != 'flux':
+                species.append(k[:-2])
+
+        units = self['ux'].attrs['units']
+
+        for s in species:
+            self[s+'u'] = dmarray(sqrt( self[s+'ux']**2+
+                                        self[s+'uy']**2+
+                                        self[s+'uz']**2),
+                                  attrs={'units':units})
+
+    def calc_flux(self):
+        '''
+        Calulate the flux of particles through the surface.
+        '''
+        from numpy import sqrt
+
+        if not 'N' in self:
+            self.calc_ndens()
+        if not 'u' in self:
+            self.calc_utotal()
+        '''
+        self['ux_hat'] = self['ux'] / self['u']
+        self['uy_hat'] = self['uy'] / self['u']
+        self['uz_hat'] = self['uz'] / self['u']
+
+        self['ux_hat'].attrs={'units':'unitless'}
+        self['uy_hat'].attrs={'units':'unitless'}
+        self['uz_hat'].attrs={'units':'unitless'}
+        '''
+
+        self['uradial'] = sqrt(self['ux']**2 + self['uy']**2 + self['uz']**2)
+        self['uradial'].attrs={'units':'km/s'}
+
+        self['flux'] = -self['uradial'] * self['N'] * 1e9
+        '''note: 1e9 converts from mixed units of km/s and N/cm^3 to units of meters
+        i.e. N / (m^2 * s)'''
+
+        self['flux'].attrs={'units':'N / (m^2 * s)'}
+
+    def calc_all(self, exclude=[]):
+        '''
+        Perform all variable calculations (e.g. calculations that
+        begin with 'calc_').  Any exceptions raised by functions that
+        could not be peformed (typicaly from missing variables) are
+        discarded.
+        '''
+        for command in dir(self):
+            if (command[0:5] == 'calc_') and (command != 'calc_all') and (command not in exclude):
+                try:
+                    eval('self.'+command+'()')
+                except AttributeError:
+                    raise Warning('Did not perform {0}: {1}'.format(
+                        command, sys.exc_info()[0]))
+
+    '''
     def add_planet(self, ax=None, rad=1.0, ang=0.0, **extra_kwargs):
-        '''
-        Creates a circle of radius=self.attrs['rbody'] and returns the
-        MatPlotLib Ellipse patch object for plotting.  If an axis is specified
-        using the "ax" keyword, the patch is added to the plot.
 
-        Unlike the add_body method, the circle is colored half white (dayside)
-        and half black (nightside) to coincide with the direction of the
-        sun. Additionally, because the size of the planet is not intrinsically
-        known to the MHD file, the kwarg "rad", defaulting to 1.0, sets the
-        size of the planet.
-
-        Extra keywords are handed to the Ellipse generator function.
-        '''
 
         from matplotlib.patches import Circle, Wedge
 
@@ -2245,20 +2468,10 @@ class Shell(IdlFile):
             ax.add_artist(arch)
 
         return body, arch
-
+    '''
+    '''
     def add_body(self, ax=None, facecolor='lightgrey', DoPlanet=True, ang=0.0,
                  **extra_kwargs):
-        '''
-        Creates a circle of radius=self.attrs['rbody'] and returns the
-        MatPlotLib Ellipse patch object for plotting.  If an axis is specified
-        using the "ax" keyword, the patch is added to the plot.
-        Default color is light grey; extra keywords are handed to the Ellipse
-        generator function.
-
-        Because the body is rarely the size of the planet at the center of
-        the modeling domain, add_planet is automatically called.  This can
-        be negated by using the DoPlanet kwarg.
-        '''
         from matplotlib.patches import Ellipse
 
         if 'rbody' not in self.attrs:
@@ -2272,11 +2485,11 @@ class Shell(IdlFile):
             self.add_planet(ax, ang=ang)
         if ax != None:
             ax.add_artist(body)
-            
+    '''
     def add_contour(self, dim1, dim2, value, nlev = 30, target = None, loc = 111,
         title = None, xlabel = None, ylabel = None, ylim= None,
         xlim = None, add_cbar = False, clabel = None,
-        filled = True, add_body = True, dolog = False, zlim = None,
+        filled = True, dolog = False, zlim = None,
         *args, **kwargs):
         '''
         Most Usefull Docstring ever right?
@@ -2295,7 +2508,7 @@ class Shell(IdlFile):
             zlim[0] = self[value].min(); zlim[1] = self[value].max()
         if dolog and zlim[0] <= 0:
             zlim[0] = np.min( [0.0001, zlim[1]/1000.0] )
- 
+
         if self['grid'].attrs['gtype'] != 'Regular':
             if filled:
                 contour = ax.tricontourf
@@ -2334,8 +2547,8 @@ class Shell(IdlFile):
 
         # Set title, labels, axis ranges (use defaults where applicable.)
         if title: ax.set_title(title)
-        if ylabel==None: ylabel='%s ($R_{E}$)'%dim2.upper()
-        if xlabel==None: xlabel='%s ($R_{E}$)'%dim1.upper()
+        if ylabel==None: ylabel='%s ($Deg$)'%dim2.upper()
+        if xlabel==None: xlabel='%s ($Deg$)'%dim1.upper()
         ax.set_ylabel(ylabel); ax.set_xlabel(xlabel)
         try:
             assert len(xlim)==2
@@ -2362,10 +2575,10 @@ class Shell(IdlFile):
         elif dim2=='x':
             ang=90.0
         else: ang=0.0
-        if add_body: self.add_body(ax, ang=ang)
+        #if add_body: self.add_body(ax, ang=ang)
 
         return fig, ax, cont, cbar
-            
+
 class ShellSlice(IdlFile):
     '''
     Shell slices are special MHD outputs where the domain is interpolated
