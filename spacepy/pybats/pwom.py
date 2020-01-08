@@ -199,6 +199,7 @@ class Line(PbData):
             
             # Get variable names; pop radius (altitude).
             var=(NameVarList.split())[1:-1]
+            self._rawvar=var
             
             #skip to next record
             i=NextDataStart+77
@@ -460,7 +461,8 @@ class Lines(PbData):
             fmt=None
         
         # Create contour plot.
-        cont=ax.tricontourf(x, y, z, levs, *args, norm=norm, **kwargs)
+        cont=ax.tricontourf(np.asarray(x), np.asarray(y), np.asarray(z), \
+                            np.asarray(levs), *args, norm=norm, **kwargs)
         
         # Label altitude.
         if show_alt:
