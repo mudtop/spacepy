@@ -189,7 +189,7 @@ class CimiEq(PbData):
         
         #find closest time to do the interpolation
         dt=self['time']-time 
-        iTime=np.where(dt == np.min(abs(dt))) [0][0]
+        iTime=np.where(abs(dt) == np.min(abs(dt))) [0][0]
         
         #get number of points
         nPoints=len(self['x'][iTime,:]) 
