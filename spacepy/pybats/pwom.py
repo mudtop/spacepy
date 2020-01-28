@@ -466,7 +466,7 @@ class Lines(PbData):
         
         # Label altitude.
         if show_alt:
-            ax.text(0.05, 0.05, r'Alt.={:.1f}$km/s$ ({:.2f}$R_E$)'.format(
+            ax.text(0.05, 0.05, r'Alt.={:.1f}$km$ ({:.2f}$R_E$)'.format(
                 self['r'][alt], self['r'][alt]/6371.0+1), size=12, 
                     transform=ax.transAxes, bbox={'fc':'white', 'ec':'k'})
 
