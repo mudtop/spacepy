@@ -13,6 +13,8 @@ from spacepy.pybats import PbData
 from spacepy.datamodel import dmarray
 
 
+
+
 class CimiEq(PbData):
     '''
     Class for loading a CIMIeq.out file.
@@ -80,7 +82,7 @@ class CimiEq(PbData):
                   target=None, 
                   loc=111, title=None,
                   add_cbar=True, clabel=None,
-                  show_pts=False, dolog=False, 
+                  show_pts=False, dolog=False, add_body=True,  
                   figsize=(8.34,7),
                   *args, **kwargs):
         '''
@@ -98,7 +100,8 @@ class CimiEq(PbData):
         from matplotlib.patches import Circle
         from matplotlib.ticker import (LogLocator, LogFormatter, 
                                        LogFormatterMathtext, MultipleLocator)
-
+        from matplotlib.patches import Wedge
+        
         # Grab the slice of data that we want:
         if type(time) == type(self['time'][0]):
             if time not in self['time']:
@@ -179,6 +182,18 @@ class CimiEq(PbData):
         ax.set_xlabel('X [Re]')
         ax.set_ylabel('Y [Re]')
 
+        if add_body:
+            angle=-90.0
+            radius=1.0
+            colors=('w','k')
+            theta1, theta2 = angle, angle + 180
+            center = (0,0)
+            w1 = Wedge(center, radius, theta1, theta2, fc=colors[0], ec='k', **kwargs)
+            w2 = Wedge(center, radius, theta2, theta1, fc=colors[1], ec='k', **kwargs)
+            for wedge in [w1,w2]:
+                ax.add_artist(wedge)
+
+            
         return fig, ax, cont, cbar
     
     def interpolate(self, var, xpt, ypt, time):
@@ -206,3 +221,123 @@ class CimiEq(PbData):
                                method='linear',fill_value=0.0)
         
         return InterpValue
+
+class CimiLog(PbData):
+    '''
+    A class for reading and plotting a complete set of CIMI log files.
+    Open using a glob string that encompasses all of the log files that are
+    intended to be read, e.g. 'CIMI*.log'.  Note that unix wildcards are
+    accepted.
+    '''
+
+    def __init__(self, filepattern, starttime=None, *args, **kwargs):
+        super(CimiLog, self).__init__(*args, **kwargs) # Init as PbData.
+        if not starttime:
+            starttime=dt.datetime(2000,1,1,0,0,0)
+        self._read(filepattern, starttime)
+        
+    def __repr__(self):
+        return 'CIMI log files:', self['files']
+
+    def _read(self, filepattern, starttime):
+        '''
+        Read all ascii line files; should only be called upon instantiation.
+        '''
+
+        from glob import glob
+        
+        self['files']=sorted(glob(filepattern))
+
+
+
+        #get total length of combined data
+        nDataLength = 0
+        for file in self['files']:
+            # Reads file assuming it is ascii
+            # Slurp whole file.
+            f=open(file, 'r')
+            lines=f.readlines()
+            f.close()
+            nDataLength = nDataLength+len(lines)-2
+        
+        
+        iCounter = 0
+        offset = 0
+        for file in self['files']:
+            # Reads file assuming it is ascii
+            # Slurp whole file.
+            f=open(file, 'r')
+            lines=f.readlines()
+            f.close()
+            
+            if iCounter == 0:
+                # Get variable names; pop g and rbody
+                var=(lines[1].split())
+                self._rawvar=var
+                # initialize arrays to hold data
+                for v in var:
+                    self[v]=dmarray(np.zeros((nDataLength)))
+
+            #read in data
+            for j,l in enumerate(lines[2:]):
+                parts=l.split()
+                for k,v in enumerate(var):
+                    self[v][offset+j]=float(parts[k])
+
+            iCounter=iCounter+1
+            offset = offset +len(lines)-2
+            
+        # Start building time array.
+        self['time']=np.zeros(nDataLength, dtype=object)
+
+        for i in range(nDataLength):
+            t= self['t'][i]
+            self['time'][i]=starttime+dt.timedelta(seconds=t)
+            
+    def plotlog(self, vars, xlim=None, ylim=None,
+                  target=None, 
+                  loc=111, title=None,
+                  dolog=False, 
+                  figsize=(8.34,7),
+                  *args, **kwargs):
+        '''
+        Create a plot of variable *var* at a given time.
+
+        If kwarg **target** is None (default), a new figure is 
+        generated from scratch.  If target is a matplotlib Figure
+        object, a new axis is created to fill that figure at subplot
+        location **loc**.  If **target** is a matplotlib Axes object, 
+        the plot is placed into that axis.
+        '''
+
+        import matplotlib.pyplot as plt
+        
+
+        fig, ax = set_target(target, loc=loc, figsize=figsize)
+        #ax.set_aspect('equal')
+
+        # Grab values from correct time/location.
+        for var in vars:
+            x = self['time'][:]
+            y = self[var][:]
+            ax.plot(x,y,label=var)
+
+        
+        # Create levels and set norm based on dolog.
+        if dolog:
+            plt.yscale('log')
+
+        #add legend
+        ax.legend()
+
+
+
+        if xlim != None:
+            ax.set_xlim(xlim[0],xlim[1])
+
+        if ylim != None:
+            ax.set_ylim(ylim[0],ylim[1])
+            
+
+            
+        return fig, ax
