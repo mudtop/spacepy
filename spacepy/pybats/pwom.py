@@ -388,15 +388,15 @@ class Lines(PbData):
 
         # Unit conversions.
         r = self['r']/6371.0 + 1.0
-        lat   = np.pi*self['Lat']/180.0
-        colat = 90. - self['Lat']
+        lat   = np.pi*abs(self['Lat'])/180.0
+        colat = 90. - abs(self['Lat'])
         lon   = np.pi*self['Lon']/180.0
 
         # Values in a Cartesian plane.
         self._xGSM = r*np.cos(lat)*np.sin(lon)
         self._yGSM = r*np.cos(lat)*np.cos(lon)
 
-        self._xLat = colat*np.sin(lon)
+        self._xLat = -1.0*colat*np.sin(lon)
         self._yLat = colat*np.cos(lon)
         
     def add_slice(self, var, alt, time, nlev=31, zlim=None, target=None, 
