@@ -212,8 +212,8 @@ def get_Bfield(ticks, loci, extMag='T01STORM', options=[1,0,0,0,0], omnivals=Non
             xin1[i],xin2[i],xin3[i], magin[:,i])
 
         # take out all the odd 'bad values' and turn them into NaN
-        if tb.feq(Blocal,badval): Blocal = np.NaN
-        BxyzGEO[np.where( tb.feq(BxyzGEO, badval)) ] = np.NaN
+        if np.isclose(Blocal,badval): Blocal = np.NaN
+        BxyzGEO[np.where( np.isclose(BxyzGEO, badval)) ] = np.NaN
 
         results['Blocal'][i] = Blocal
         results['Bvec'][i,:] = BxyzGEO
@@ -291,9 +291,9 @@ def find_Bmirror(ticks, loci, alpha, extMag='T01STORM', options=[1,0,0,0,0], omn
             iyearsat[i],idoysat[i],secs[i], xin1[i],xin2[i],xin3[i], alpha, magin[:,i])
 
         # take out all the odd 'bad values' and turn them into NaN
-        if tb.feq(blocal,badval): blocal = np.NaN
-        if tb.feq(bmirr,badval) : bmirr  = np.NaN
-        GEOcoord[np.where( tb.feq(GEOcoord,badval)) ] = np.NaN
+        if np.isclose(blocal,badval): blocal = np.NaN
+        if np.isclose(bmirr,badval) : bmirr  = np.NaN
+        GEOcoord[np.where( np.isclose(GEOcoord,badval)) ] = np.NaN
 
         results['Blocal'][i] = blocal
         results['Bmirr'][i] = bmirr	
@@ -362,8 +362,8 @@ def find_magequator(ticks, loci, extMag='T01STORM', options=[1,0,0,0,0], omnival
             iyearsat[i],idoysat[i],secs[i], xin1[i],xin2[i],xin3[i],magin[:,i])
 
         # take out all the odd 'bad values' and turn them into NaN
-        if tb.feq(bmin,badval): bmin = np.NaN
-        GEOcoord[np.where( tb.feq(GEOcoord, badval)) ] = np.NaN
+        if np.isclose(bmin,badval): bmin = np.NaN
+        GEOcoord[np.where( np.isclose(GEOcoord, badval)) ] = np.NaN
 
         results['Bmin'][i] = bmin
         results['loci'][i] = GEOcoord
@@ -471,8 +471,8 @@ def find_LCDS(ticks, alpha, extMag='T01STORM', options=[1,0,0,0,0], omnivals=Non
                 iyearsat[0],idoysat[0],secs[0], xin1[0],xin2[0],xin3[0],magin[:,0])
 
             # take out all the odd 'bad values' and turn them into NaN
-            if tb.feq(bmin,badval): bmin = np.NaN
-            GEOcoord[np.where( tb.feq(GEOcoord, badval)) ] = np.NaN
+            if np.isclose(bmin,badval): bmin = np.NaN
+            GEOcoord[np.where( np.isclose(GEOcoord, badval)) ] = np.NaN
             #Now get Lstar at this location...
             if GEOcoord[0]!=np.NaN:
                 pos1 = spc.Coords(GEOcoord, 'GEO', 'car')
@@ -507,8 +507,8 @@ def find_LCDS(ticks, alpha, extMag='T01STORM', options=[1,0,0,0,0], omnivals=Non
                 iyearsat[0],idoysat[0],secs[0], xin1[0],xin2[0],xin3[0],magin[:,0])
 
             # take out all the odd 'bad values' and turn them into NaN
-            if tb.feq(bmin,badval): bmin = np.NaN
-            GEOcoord[np.where( tb.feq(GEOcoord, badval)) ] = np.NaN
+            if np.isclose(bmin,badval): bmin = np.NaN
+            GEOcoord[np.where( np.isclose(GEOcoord, badval)) ] = np.NaN
             #Now get Lstar at this location...
             if GEOcoord[0]!=np.NaN:
                 pos2 = spc.Coords(GEOcoord, 'GEO', 'car')
@@ -541,8 +541,8 @@ def find_LCDS(ticks, alpha, extMag='T01STORM', options=[1,0,0,0,0], omnivals=Non
                 bmin, GEOcoord = oplib.find_magequator1(kext,options,sysaxes,\
                     iyearsat[0],idoysat[0],secs[0], xin1[0],xin2[0],xin3[0],magin[:,0])
                 # take out all the odd 'bad values' and turn them into NaN
-                if tb.feq(bmin,badval): bmin = np.NaN
-                GEOcoord[np.where( tb.feq(GEOcoord, badval)) ] = np.NaN
+                if np.isclose(bmin,badval): bmin = np.NaN
+                GEOcoord[np.where( np.isclose(GEOcoord, badval)) ] = np.NaN
                 #print('bmin, GEOcoord = {0},{1}'.format(bmin, GEOcoord))
                 if not (np.isnan(bmin)):
                     #Now get Lstar at this location...
@@ -669,8 +669,8 @@ def find_LCDS_K(ticks, K, extMag='T01STORM', options=[1,1,3,0,0], omnivals=None,
                 iyearsat[0],idoysat[0],secs[0], xin1[0],xin2[0],xin3[0],magin[:,0])
 
             # take out all the odd 'bad values' and turn them into NaN
-            if tb.feq(bmin,badval): bmin = np.NaN
-            GEOcoord[np.where( tb.feq(GEOcoord, badval)) ] = np.NaN
+            if np.isclose(bmin,badval): bmin = np.NaN
+            GEOcoord[np.where( np.isclose(GEOcoord, badval)) ] = np.NaN
             #Now get Lstar at this location...
             if np.isfinite(GEOcoord[0]):
                 pos1 = spc.Coords(GEOcoord, 'GEO', 'car')
@@ -723,8 +723,8 @@ def find_LCDS_K(ticks, K, extMag='T01STORM', options=[1,1,3,0,0], omnivals=None,
                 iyearsat[0],idoysat[0],secs[0], xin1[0],xin2[0],xin3[0],magin[:,0])
 
             # take out all the odd 'bad values' and turn them into NaN
-            if tb.feq(bmin,badval): bmin = np.NaN
-            GEOcoord[np.where( tb.feq(GEOcoord, badval)) ] = np.NaN
+            if np.isclose(bmin,badval): bmin = np.NaN
+            GEOcoord[np.where( np.isclose(GEOcoord, badval)) ] = np.NaN
             #Now get Lstar at this location...
             if np.isfinite(GEOcoord[0]):
                 pos2 = spc.Coords(GEOcoord, 'GEO', 'car')
@@ -766,8 +766,8 @@ def find_LCDS_K(ticks, K, extMag='T01STORM', options=[1,1,3,0,0], omnivals=None,
                 bmin, GEOcoord = oplib.find_magequator1(kext,options,sysaxes,\
                     iyearsat[0],idoysat[0],secs[0], xin1[0],xin2[0],xin3[0],magin[:,0])
                 # take out all the odd 'bad values' and turn them into NaN
-                if tb.feq(bmin,badval): bmin = np.NaN
-                GEOcoord[np.where( tb.feq(GEOcoord, badval)) ] = np.NaN
+                if np.isclose(bmin,badval): bmin = np.NaN
+                GEOcoord[np.where( np.isclose(GEOcoord, badval)) ] = np.NaN
                 #print('bmin, GEOcoord = {0},{1}'.format(bmin, GEOcoord))
                 if not (np.isnan(bmin)):
                     #Now get Lstar at this location...
@@ -855,8 +855,8 @@ def AlphaOfK(ticks, loci, K, extMag='T01STORM', options=[0,0,3,0,0], omnivals=No
                          iyearsat[i],idoysat[i],secs[i], xin1[i],xin2[i],xin3[i],magin[:,i])
 
         # take out all the odd 'bad values' and turn them into NaN
-        if tb.feq(bmin,badval): bmin = np.NaN
-        GEOcoord[np.where( tb.feq(GEOcoord, badval)) ] = np.NaN
+        if np.isclose(bmin,badval): bmin = np.NaN
+        GEOcoord[np.where( np.isclose(GEOcoord, badval)) ] = np.NaN
 
         pa0 = 90 #start with equatorially mirroring
         #Now get K for initial alpha at this location...
@@ -979,9 +979,9 @@ def find_footpoint(ticks, loci, extMag='T01STORM', options=[1,0,3,0,0], hemi='sa
             iyearsat[i], idoysat[i], secs[i], xin1[i], xin2[i], xin3[i], alt, hemi_flag, magin[:,i])
 
         # take out all the odd 'bad values' and turn them into NaN
-        if tb.feq(bfootmag,badval): bmin = np.NaN
-        xfoot[np.where( tb.feq(xfoot, badval)) ] = np.NaN
-        bfoot[np.where( tb.feq(bfoot, badval)) ] = np.NaN
+        if np.isclose(bfootmag,badval): bmin = np.NaN
+        xfoot[np.where( np.isclose(xfoot, badval)) ] = np.NaN
+        bfoot[np.where( np.isclose(bfoot, badval)) ] = np.NaN
 
         results['Bfoot'][i] = bfootmag
         results['loci'][i] = xfoot
@@ -1316,13 +1316,13 @@ def get_AEP8(energy, loci, model='min', fluxtype='diff', particles='e'):
         print('Warning: coords need to be either a spacepy.coordinates.Coords instance or a list of [BBo, L]')
         
     
-    flux[np.where( tb.feq(flux, d['badval'])) ] = np.NaN
+    flux[np.where( np.isclose(flux, d['badval'])) ] = np.NaN
     
     return flux[0,0]
     
 
 # -----------------------------------------------
-def _get_Lstar(ticks, loci, alpha, extMag='T01STORM', options=[1,0,0,0,0], omnivals=None): 
+def _get_Lstar(ticks, loci, alpha, extMag='T01STORM', options=[1,0,0,0,0], omnivals=None, landi2lstar=False): 
     """
     This will call make_lstar1 or make_lstar_shell_splitting_1 from the irbem library
     and will lookup omni values for given time if not provided (optional). If pitch angles
@@ -1341,6 +1341,8 @@ def _get_Lstar(ticks, loci, alpha, extMag='T01STORM', options=[1,0,0,0,0], omniv
                             'T05', 'ALEX', 'TS07']
         - options (optional list or array of integers length=5) : explained below
         - omni values as dictionary (optional) : if not provided, will use lookup table 
+        - landi2lstar : if True, will use the faster landi2lstar routine if possible. This 
+            routine can only be used with OPQUIET+IGRF magnetic field models.
 
     Returns
     =======
@@ -1433,40 +1435,46 @@ def _get_Lstar(ticks, loci, alpha, extMag='T01STORM', options=[1,0,0,0,0], omniv
     nTAI = len(ticks)
     d = prep_irbem(ticks, loci, alpha, extMag, options, omnivals)
     nalpha = d['nalpha']
-        
-    if isinstance(alpha, numbers.Number): # no drift shell splitting
-        raise Exception
-        lm, lstar, blocal, bmin, xj, mlt = oplib.make_lstar1(nTAI, d['kext'], d['options'], d['sysaxes'],\
-                    d['iyearsat'], d['idoysat'], d['utsat'], d['xin1'], d['xin2'], d['xin3'], d['magin'])
+    if d['kext'] != 5 or d['options'][4] != 0:
+        landi2lstar = False
+    no_shell_splitting = (nalpha == 0) or (nalpha == 1 and alpha[0] == 90)
 
-    elif nalpha > 0 and nalpha <= d['nalp_max']: # with drift shell splitting
-        lm, lstar, bmirr, bmin, xj, mlt = oplib.make_lstar_shell_splitting1(nTAI, nalpha, \
-            d['kext'], d['options'], d['sysaxes'], d['iyearsat'], d['idoysat'], d['utsat'], \
-            d['xin1'], d['xin2'], d['xin3'], d['degalpha'], d['magin'])
-
-    else:
-        print('ERROR: too many pitch angles requested; 25 is maximum')
+    # Arguments that are common to all flavors of L* functions
+    args = [nTAI, d['kext'], d['options'],
+            d['sysaxes'],d['iyearsat'], d['idoysat'], d['utsat'],
+            d['xin1'], d['xin2'], d['xin3'], d['magin']]
+    if no_shell_splitting: # no drift shell splitting
+        func = oplib.landi2lstar1 if landi2lstar else oplib.make_lstar1
+    else: # with drift shell splitting
+        # Drift shell splitting requires pitch angle positional args
+        args.insert(1, nalpha)
+        args.insert(-1, d['degalpha'])
+        func = oplib.landi2lstar_shell_splitting1 if landi2lstar \
+               else oplib.make_lstar_shell_splitting1
+    # For a locally 90-degree particle, bmirr is blocal
+    lm, lstar, bmirr, bmin, xj, mlt = func(*args)
 
     # take out all the odd 'bad values' and turn them into NaN
-    lm[np.where( tb.feq(lm,d['badval'])) ] = np.NaN
-    lstar[np.where( tb.feq(lstar,d['badval'])) ] = np.NaN
-    bmin[np.where( tb.feq(bmin,d['badval'])) ] = np.NaN
-    xj[np.where( tb.feq(xj,d['badval'])) ] = np.NaN
-    mlt[np.where( tb.feq(mlt,d['badval'])) ] = np.NaN
+    lm[np.where( np.isclose(lm,d['badval'])) ] = np.NaN
+    lstar[np.where( np.isclose(lstar,d['badval'])) ] = np.NaN
+    bmin[np.where( np.isclose(bmin,d['badval'])) ] = np.NaN
+    xj[np.where( np.isclose(xj,d['badval'])) ] = np.NaN
+    mlt[np.where( np.isclose(mlt,d['badval'])) ] = np.NaN
 
     results = {}
-    if nalpha == 0:
-        results['Lm'] = lm[0:nTAI]
-        results['Lstar'] = lstar[0:nTAI]
-        blocal[np.where( tb.feq(blocal,d['badval'])) ] = np.NaN
-        results['Blocal'] = blocal[0:nTAI]
+    if no_shell_splitting:
+        results['Lm'] = lm[0:nTAI][:,None]
+        results['Lstar'] = lstar[0:nTAI][:,None]
+        bmirr[np.where( np.isclose(bmirr,d['badval'])) ] = np.NaN
+        results['Blocal'] = bmirr[0:nTAI]
+        results['Bmirr'] = results['Blocal'][:,None]
         results['Bmin'] = bmin[0:nTAI]
-        results['Xj'] = xj[0:nTAI]
+        results['Xj'] = xj[0:nTAI][:,None]
         results['MLT'] = mlt[0:nTAI]
     else:		
         results['Lm'] = lm[0:nTAI, 0:nalpha]
         results['Lstar'] = lstar[0:nTAI, 0:nalpha]
-        bmirr[np.where( tb.feq(bmirr, d['badval'])) ] = np.NaN
+        bmirr[np.where( np.isclose(bmirr, d['badval'])) ] = np.NaN
         results['Bmirr'] = bmirr[0:nTAI, 0:nalpha]
         results['Bmin'] = bmin[0:nTAI]
         results['Xj'] = xj[0:nTAI, 0:nalpha]
@@ -1495,9 +1503,12 @@ def get_Lm(ticks, loci, alpha, extMag='T01STORM', intMag='IGRF', IGRFset=0, omni
 
     Returns
     =======
+
         - results (dictionary) : containing keys: Lm, Bmin, Blocal (or Bmirr), Xj, MLT 
             if pitch angles provided in "alpha" then drift shells are calculated and "Bmirr" 
-            is returned if not provided, then "Blocal" at spacecraft is returned.
+            is returned if not provided, then "Blocal" at spacecraft is returned. A negative
+            value for Lm indicates the field line is closed but particles are lost to the
+            atmosphere; the absolute value indicates the L value.
 
     Examples
     ========
@@ -1526,7 +1537,7 @@ def get_Lm(ticks, loci, alpha, extMag='T01STORM', intMag='IGRF', IGRFset=0, omni
     return results
 
 # -----------------------------------------------
-def get_Lstar(ticks, loci, alpha=90, extMag='T01STORM', options=[1,0,0,0,0], omnivals=None):
+def get_Lstar(ticks, loci, alpha=90, extMag='T01STORM', options=[1,0,0,0,0], omnivals=None, landi2lstar=False):
     """
     This will call make_lstar1 or make_lstar_shell_splitting_1 from the irbem library
     and will lookup omni values for given time if not provided (optional). If pitch angles
@@ -1545,12 +1556,18 @@ def get_Lstar(ticks, loci, alpha=90, extMag='T01STORM', options=[1,0,0,0,0], omn
                             'T05', 'ALEX', 'TS07']
         - options (optional list or array of integers length=5) : explained below
         - omni values as dictionary (optional) : if not provided, will use lookup table 
+        - landi2lstar : if True, will use the faster landi2lstar routine if possible. This 
+            routine can only be used with OPQUIET+IGRF magnetic field models.
 
     Returns
     =======
         - results (dictionary) : containing keys: Lm, Lstar, Bmin, Blocal (or Bmirr), Xj, MLT 
             if pitch angles provided in "alpha" then drift shells are calculated and "Bmirr" 
-            is returned if not provided, then "Blocal" at spacecraft is returned.
+            is returned if not provided, then "Blocal" at spacecraft is returned. A negative
+            value for Lm indicates the field line is closed but particles are lost to the
+            atmosphere; the absolute value indicates the L value. A negative value for Lstar
+            indicates the field line is closed but particles are lost to the atmosphere
+            before completing a drift orbit; the absolute value indicates the drift shell.
 
     Examples
     ========
@@ -1649,6 +1666,7 @@ def get_Lstar(ticks, loci, alpha=90, extMag='T01STORM', options=[1,0,0,0,0], omn
     def reassemble(result):
         '''Reassemble the results from the multiprocessing'''
         funcs = {'Bmin': np.hstack,
+                 'Blocal': np.hstack,
                  'Bmirr': np.vstack,
                  'Lm': np.vstack,
                  'Lstar': np.vstack,
@@ -1670,7 +1688,9 @@ def get_Lstar(ticks, loci, alpha=90, extMag='T01STORM', options=[1,0,0,0,0], omn
     ncalc = len(ticks)
     nalpha = len(alpha)
 
-    if ncpus>1:
+    if ncalc < ncpus * 2: #Don't multiprocess if not worth it
+        ncpus = 1
+    if ncpus > 1:
         import __main__ as main
         if hasattr(main, '__file__'):
             try:
@@ -1681,7 +1701,7 @@ def get_Lstar(ticks, loci, alpha=90, extMag='T01STORM', options=[1,0,0,0,0], omn
         else:
             ncpus = 1 #won't multiprocess in interactive mode
 
-    if ncpus > 1 and ncalc >= ncpus*2:
+    if ncpus > 1:
         nblocks = ncpus
         blocklen = np.floor_divide(ncalc, ncpus)
         tt, cc = [], []
@@ -1699,11 +1719,13 @@ def get_Lstar(ticks, loci, alpha=90, extMag='T01STORM', options=[1,0,0,0,0], omn
             cc.append(loci[startind:endind]) #chunk positions
             if omnivals:
                 ov.append(get_ov(omnivals, startind, endind))
-        inputs = [[tch, cch, alpha, extMag, options, ov] for tch, cch in zip(tt,cc)]
+        inputs = [[tch, cch, alpha, extMag, options, ov, landi2lstar] for tch, cch in zip(tt,cc)]
         result = pool.map(_multi_get_Lstar, inputs)
+        pool.close()
+        pool.join()
         DALL = reassemble(result)
     else: # single NCPU, no chunking
-        DALL = _get_Lstar(ticks, loci, alpha, extMag, options, omnivals)
+        DALL = _get_Lstar(ticks, loci, alpha, extMag, options, omnivals, landi2lstar)
 
     return DALL
 
@@ -1717,7 +1739,8 @@ def _multi_get_Lstar(inputs):
     extMag = inputs[3]
     options = inputs[4]
     omnivals = inputs[5]
-    DALL = _get_Lstar(ticks, loci, alpha, extMag, options, omnivals)
+    landi2lstar = inputs[6]
+    DALL = _get_Lstar(ticks, loci, alpha, extMag, options, omnivals, landi2lstar)
     
     return DALL
 
@@ -1803,18 +1826,26 @@ def prep_irbem(ticks=None, loci=None, alpha=[], extMag='T01STORM', options=[1,0,
 
     # copy coordinates into array
     # prepare coordinates
-    d['sysaxes'] = loci.sysaxes
+    if loci.sysaxes is None:
+        # System type not supported by IRBEM
+        # Convert car -> sph or vice versa as required
+        newcarsph = [key for (key, val) in SYSAXES_TYPES[loci.dtype].items()
+                     if val is not None][0]
+        posi = loci.convert(loci.dtype, newcarsph)
+    else:
+        posi = loci
+    d['sysaxes'] = posi.sysaxes
     xin1 = np.zeros(ntime_max, dtype=float)
     xin2 = np.zeros(ntime_max, dtype=float)
     xin3 = np.zeros(ntime_max, dtype=float) 
-    if loci.carsph == 'sph':
-        xin1[0:nTAI] = loci.radi[:]
-        xin2[0:nTAI] = loci.lati[:]
-        xin3[0:nTAI] = loci.long[:]
+    if posi.carsph == 'sph':
+        xin1[0:nTAI] = posi.radi[:]
+        xin2[0:nTAI] = posi.lati[:]
+        xin3[0:nTAI] = posi.long[:]
     else:
-        xin1[0:nTAI] = loci.x[:]
-        xin2[0:nTAI] = loci.y[:]
-        xin3[0:nTAI] = loci.z[:]
+        xin1[0:nTAI] = posi.x[:]
+        xin2[0:nTAI] = posi.y[:]
+        xin3[0:nTAI] = posi.z[:]
     d['xin1'] = xin1
     d['xin2'] = xin2
     d['xin3'] = xin3
@@ -1832,6 +1863,9 @@ def prep_irbem(ticks=None, loci=None, alpha=[], extMag='T01STORM', options=[1,0,
         nalpha = 1
         alpha = [alpha]
     nalpha = len(alpha)
+    if nalpha > d['nalp_max']:
+        raise ValueError('Too many pitch angles requested; {} is maximum.'
+                         .format(d['nalp_max']))
     d['nalpha'] = nalpha
     if nalpha > 0:
         degalpha[0:nalpha] = alpha

@@ -58,6 +58,7 @@ range set the keyword argument interp to False.
 
 """
 import bisect, re, os
+import sys
 import numpy as np
 from spacepy.datamodel import SpaceData, dmarray, dmcopy, unflatten, readJSONheadedASCII, dmfilled, fromHDF5
 from spacepy.toolbox import tOverlapHalf, indsFromXrange
@@ -82,7 +83,7 @@ def get_omni(ticks, dbase='QDhourly', **kwargs):
         time values for desired output
 
     dbase : str (optional)
-        Select data source, options are 'QDhourly', 'OMNI2', 'Mergedhourly'
+        Select data source, options are 'QDhourly', 'OMNI2hourly', 'Mergedhourly'
         Note - Custom data sources can be specified in the spacepy config file
         as described in the module documentation.
 
@@ -245,7 +246,7 @@ def get_omni(ticks, dbase='QDhourly', **kwargs):
         else:
             ldb = 'Test'
             fln = testfln
-        with h5.File(fln, 'r') as hfile:
+        with h5.File(fln, mode='r') as hfile:
             QDkeylist = [kk for kk in hfile if kk not in ['Qbits', 'UTC']]
             st, en = ticks[0].RDT, ticks[-1].RDT
             ##check that requested requested times are within range of data
@@ -271,7 +272,7 @@ def get_omni(ticks, dbase='QDhourly', **kwargs):
 
     if dbase_options[dbase] == 2 or dbase_options[dbase] == 3:
         ldb = 'OMNI2hourly'
-        with h5.File(omni2fln) as hfile:
+        with h5.File(omni2fln, mode='r') as hfile:
             O2keylist = [kk for kk in hfile if kk not in ['Epoch','RDT']]
             st, en = ticks[0].RDT, ticks[-1].RDT
             ##check that requested requested times are within range of data
@@ -373,10 +374,18 @@ def omnirange(dbase='QDhourly'):
               'Test': testfln}
     if dbase not in infile:
         raise NotImplementedError('')
-    with h5.File(infile[dbase]) as hfile:
-        start, end = hfile['RDT'][0], hfile['RDT'][-1]
-        start = spt.Ticktock(start, 'RDT').UTC[0]
-        end = spt.Ticktock(end, 'RDT').UTC[0]
+    # Possible time variables in the HDF file and their ticktock dtype
+    timeinfo = [('UTC', 'UTC'), ('Epoch', 'ISO'), ('RDT', 'RDT')]
+    with h5.File(infile[dbase], mode='r') as hfile:
+        for varname, dtype in timeinfo:
+            if varname in hfile:
+                tt = spt.Ticktock([hfile[varname][0], hfile[varname][-1]],
+                                  dtype=dtype)
+                break
+        else:
+            raise ValueError('Cannot find time variable in {}'
+                             .format(infile[dbase]))
+    start, end = tt.UTC
     
     return start, end
 
@@ -397,7 +406,11 @@ except ImportError:
 #dotfln = os.environ['HOME']+'/.spacepy'
 omnifln = os.path.join(DOT_FLN,'data','omnidata{0}'.format(_ext))
 omni2fln = os.path.join(DOT_FLN,'data','omni2data{0}'.format(_ext))
-testfln = os.path.join('data','OMNItest{0}'.format(_ext))
+# Test data is stored relative to the test script
+testfln = os.path.join(os.path.abspath(os.path.dirname(sys.argv[0])),
+                       'data', 'OMNItest{0}'.format(_ext))
+if not os.path.isfile(testfln): # Hope it's relative to current!
+    testfln = os.path.join(os.path.abspath('data'), 'OMNItest{0}'.format(_ext))
 
 if _ext=='.h5':
     presentQD = h5py.is_hdf5(omnifln)

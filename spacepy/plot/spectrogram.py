@@ -304,6 +304,8 @@ class spectrogram(dm.SpaceData):
         np.add(overall_sum, H.transpose(), overall_sum)
 
         overall_count = np.ma.masked_array(overall_count, overall_count == 0)
+        # Explicitly ensure this array owns its mask
+        overall_count.unshare_mask()
         data = np.ma.divide(overall_sum, overall_count)
 
         ## for plotting
@@ -606,7 +608,8 @@ def simpleSpectrogram(*args, **kwargs):
         if X.shape[0] == Z.shape[0]: # same length, expand X
             X = tb.bin_center_to_edges(X) # hopefully evenly spaced
         if len(Y.shape) == 1: # 1d, just use as axis
-            Y = tb.bin_center_to_edges(Y) # hopefully evenly spaced
+            if Y.shape[0] == Z.shape[1]: # same length, expand Y
+                Y = tb.bin_center_to_edges(Y) # hopefully evenly spaced
         elif len(Y.shape) == 2:
             Y_orig = Y
             # 2d this is time dependent and thus need to overplot several
@@ -656,7 +659,8 @@ def simpleSpectrogram(*args, **kwargs):
     
     if cb: # add a colorbar
         cb_ = fig.colorbar(pc)
-        cb_.set_label(cbtitle)
+        if cbtitle is not None:
+            cb_.set_label(cbtitle)
     return ax
 
     

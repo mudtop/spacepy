@@ -1,4 +1,80 @@
-Changes in Version 0.2.1 (2019-xx-xx)
+Changes in Version 0.2.2 (2020-xx-xx)
+=====================================
+- Document end of support for Python 2
+- Quaternion math functions moved to coordinates module
+coordinates
+ - Include upstream fix for SPH->RLL coordinate transform
+datamodel
+ - Fix in SpaceData.toXXX() methods which would fail in some cases, now work as intended
+ - Documentation update and default units change in createISTPattrs
+datamanager
+ - New function "rebin", rebin an axis of an array by contents of another
+irbempy
+ - Update IRBEMlib to rev620
+ - Rev620 adds IGRF13 coefficients
+ - Add conversion so all systems supported by coordinates can be passed
+   to IRBEMlib routines
+ - Fix compilation on Raspberry Pi
+plot
+ - utils.EventClicker support for non-line plots (e.g. pcolor)
+ - New method for adding arrows to lines in utils
+pycdf
+ - VarCopy objects now carry information to help reproduce original
+ - Newly-public method nelems to get number of elements in zVar
+ - New function concatCDF to read data from multiple CDFs
+ - Fix assignment of "raw" values to EPOCH16 Attribute
+ - Fix "minimum value" calculation for TT2000 types
+ - Fix carryover of compression parameter when making a variable from
+   another variable
+ - istp.VariableChecks adds check for VALID/SCALE MIN/MAX Entry types
+ - istp.VariableChecks adds check for DELTA attributes
+ - istp.VariableChecks adds check for FILLVAL
+ - istp.VariableChecks and FileChecks add check for empty attribute Entries
+ - istp.VarBundle class to copy variables, slices, and depends between CDFs
+ - istp.nanfill function to replace fill values with NaN
+ - Warn if make CDF without explicitly setting backward compatible mode
+   (either true or false); default will change to NOT backward compatible.
+ - Warn if assign datetime to a variable without specifying a type;
+   default will change to CDF_TIME_TT2000.
+ - Fix epoch_to_num with newer versions of matplotlib.
+pybats
+ - Updated gitm.GitmBin reader to fix failures in Python 3.x.
+ - Fix for incorrect Kyoto Kp plots.
+ - Fixed open/closed tolerance kwarg not working in add_b_magsphere.
+ - Added new stream trace visualization method for Bats2d objects: add_stream_scatter
+ - Bats2d.add_b_magsphere and add_stream_scatter now have kwargs for adding arrows on ray traces
+ - Updates to ram.RamSat including omnidirectional flux calculation
+ - ram.PressureFile fixed for Python 3.x failures
+ - rim.Iono objects now load poorly-formatted files; rim.fix_format deprecated
+time
+ - Fix handling of leapseconds before 1961.
+ - For types that cannot represent leapseconds (e.g. UTC datetime), time
+   within the leap second is now converted to the end of the day rather
+   than the beginning of the next day.
+ - Fractional leapsecond counts are now rounded to the integer rather than
+   truncated.
+ - Fix conversions to ISO before 1900 on Python 2.
+ - Include leapseconds in JD/MJD calculation, so the length of a second on a
+   day with leapseconds is slightly shorter but leap second times are not lost.
+ - Most time systems are now converted to/from TAI. This may cause small
+   differences with previous versions of SpacePy, on order of a double
+   precision. Time conversions around leapseconds may also be different;
+   in many cases they were undefined in previous versions.
+ - now and today return UTC times, not local.
+ - matplotlib no longer required, including RDT and randomDate.
+ - Add support for conversion to/from astropy.time.Time
+toolbox
+ - New function get_url to retrieve data from a URL
+ - Change update to retrieve OMNI2 data from SPDF not ViRBO
+ - Change update to supplement ViRBO Qin-Denton files with NMC daily files
+ - Change update to get leapseconds from NASA MODIS instead of USNO
+ - New functions quaternionFromMatrix/quaternionToMatrix to convert between
+   quaternions and 3D rotation matrices.
+ - Fix human_sort; this had been broken since 0.1.6.
+ - Fix function bootHisto to pass through RNG seed if provided
+ - Deprecate function feq in favor of numpy.isclose.
+
+Changes in Version 0.2.1 (2019-10-02)
 =====================================
 datamodel
  - Allow access to attributes via "meta" property
@@ -10,6 +86,7 @@ pycdf
  - Allow access to attributes via "meta" property
  - Single element references now return Python types not numpy scalars
  - Fix type-guessing on numpy object arrays with no values
+ - New "istp" module supporting CDFs with ISTP-compliant metadata
 
 Changes in Version 0.2.0 (2019-06-22)
 =====================================

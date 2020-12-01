@@ -38,7 +38,6 @@ If you change the default location, make sure you add the environment
 variable ``$SPACEPY`` to your ``.cshrc, .tcshrc,`` or ``.bashrc``
 script.
 
-
 Available configuration options
 ===============================
 enable_deprecation_warning
@@ -48,6 +47,13 @@ enable_deprecation_warning
   deprecated function is called. Set this option to False to retain the default
   Python behavior. (See :py:mod:`warnings` module for details on custom warning
   filters.)
+
+keepalive
+  True to attempt to use HTTP keepalives when downloading data in
+  :py:func:`~spacepy.toolbox.update` (default). This is faster when
+  downloading many small files but may be fragile (e.g. if a proxy
+  server is required). Set to False for a more robust and flexible,
+  but slower, codepath.
 
 leapsec_url
   URL of the leapsecond database used by time conversions.
@@ -70,14 +76,25 @@ omni2_url
   The default should almost always be acceptable.
 
 qindenton_url
-  URL containing Qin-Denton packaging of OMNI data.
+  URL containing Qin-Denton packaging of OMNI data as as single file.
   :py:func:`~spacepy.toolbox.update` will download from the URL.
   The default should almost always be acceptable.
+
+qd_daily_url
+  URL containing Qin-Denton packaging of OMNI data in daily files,
+  supplemental to ``qindenton_url``. :py:func:`~spacepy.toolbox.update`
+  will download from the URL. The default should almost always be
+  acceptable.
 
 psddata_url
   URL containing PSD data.
   :py:func:`~spacepy.toolbox.update` will download from the URL if requested.
   The default should almost always be acceptable.
+
+support_notice
+  True to display a notice on import if not a release version of SpacePy
+  (default); False to omit. Those regularly installing from git instead
+  of a release may want to set this to False.
 
 user_agent
   User Agent for network access. If this is set,

@@ -455,7 +455,7 @@ def _read_idl_ascii(pbdat, header='units', keep_case=True):
     if nSkip<0: nSkip=0
           
     # Save grid names (e.g. 'x' or 'r') and save associated params.
-    pbdat['grid'].attrs['dims']=names[0:ndim]
+    pbdat['grid'].attrs['dims']=tuple(names[0:ndim])
     for name, para in zip(names[(nvar+ndim):], para):
         pbdat.attrs[name]=para
         
@@ -496,17 +496,30 @@ def _read_idl_ascii(pbdat, header='units', keep_case=True):
                 pbdat[v] = dmarray(np.reshape(pbdat[v], pbdat['grid'],
                                               order='F'), attrs=pbdat[v].attrs)
 
-def readarray(f,dtype=np.float32,inttype=np.int32):
-    """
+def readarray(f, dtype=np.float32, inttype=np.int32):
+    '''
     Read an array from an unformatted binary file written out by a 
     Fortran program.
 
-    :param f: File to read
-    :type f: File-like
-    :param nrec: Number of records to read. If nrec is greater than one, 
-    all records read will be appended together into a single 1-D array.
-    :type nrec: int
-    """
+    Parameters
+    ==========
+    f : Binary file object
+        The file from which to read the array of values.
+
+    Other Parameters
+    ================
+    dtype : data type
+        The data type used for data conversion.
+    inttype : Numpy integer type
+        Set the precision for the integers that store the size of each
+        entry.   Defaults to numpy.int32
+    
+    Returns
+    =======
+    numpy.array : Numpy array
+        Return the data read from file as a 1-dimensional array.
+
+    '''
 
     if dtype is str:
         dtype_size_bytes=1
@@ -519,7 +532,9 @@ def readarray(f,dtype=np.float32,inttype=np.int32):
     # Check that the record length is consistent with the data type
     if rec_len%dtype_size_bytes!=0:
         raise ValueError('Read error: Data type inconsistent with record' +
-                         ' length (data type size is {0:d} bytes, record length is {1:d} bytes'.format(int(dtype_size_bytes),int(n)))
+                         ' length (data type size is {0:d} bytes, record' +
+                         ' length is {1:d} bytes'.format(
+                             int(dtype_size_bytes),int(n)))
 
     if len(rec_len)==0:
         # Zero-length record...file may be truncated
@@ -601,7 +616,6 @@ def _read_idl_bin(pbdat, header='units', keep_case=True, headeronly=False):
         Returns True on success.
 
     '''
-    import struct
 
     # Open, read, and parse the file into numpy arrays.
     # Note that Fortran writes integer buffers around records, so
@@ -711,7 +725,7 @@ def _read_idl_bin(pbdat, header='units', keep_case=True, headeronly=False):
         if nSkip<0: nSkip = 0
         
         # Save grid names (e.g. 'x' or 'r') and save associated params.
-        pbdat['grid'].attrs['dims']=names[0:ndim]
+        pbdat['grid'].attrs['dims']=tuple(names[0:ndim])
         for name, para in zip(names[(nvar+ndim):], para):
             pbdat.attrs[name]=para
                 
@@ -1088,9 +1102,9 @@ class LogFile(PbData):
             for j, name in enumerate(names):
                 self[name][i] = float(vals[loc[name]])
 
-            # Convert time and runtime to dmarrays.
-            self['time']   =time
-            self['runtime']=runtime
+        # Convert time and runtime to dmarrays.
+        self['time'] = time
+        self['runtime'] = runtime
 
 
 class NgdcIndex(PbData):
@@ -1421,82 +1435,68 @@ class ImfInput(PbData):
         Read an SWMF IMF/solar wind input file into a newly
         instantiated imfinput object.
         '''
-        from numpy import zeros
         import datetime as dt
-
-        # Slurp lines into memory.
-        f = open(infile, 'r')
-        lines = f.readlines()
-        f.close()
         
-        # Read header.  All non-blank lines before first Param are header.
-        self.attrs['header']=[]
-        while 1:
-            if (lines[0].strip() != '') and lines[0][0] != '#':
-                self.attrs['header'].append(lines.pop(0)) 
-            else:
-                break
-
-        # Parse all Params.
-        while len(lines)>0:
-            # Grab line, continue if it's not a Param.
-            param=lines.pop(0).strip()
-            if param=='': continue
-            if param[0] != '#': continue
-            # For all possible Params, set object attributes/info.
-            if param[:5] == '#COOR':
-                self.attrs['coor']=lines.pop(0)[0:3]
-            elif param[:7] == '#REREAD':
-                self.attrs['reread']=True
-            elif param[:7] == '#ZEROBX':
-                setting=lines.pop(0)[0]
-                if setting=='T':
-                    self.attrs['zerobx']=True
+        in_header = True
+        with open(infile, 'r') as f:
+            while True:
+                line = f.readline()
+                # All non-blank lines before first Param are header
+                if in_header:
+                    if line.strip() and line[0] != '#':
+                        self.attrs['header'].append(line)
+                        continue
+                    else:
+                        in_header = False
+                # Parse all params.
+                # Grab line, continue if it's not a Param.
+                param = line.strip()
+                if not param or param[0] != '#':
+                    continue
+                # For all possible Params, set object attributes/info.
+                if param[:5] == '#COOR':
+                    self.attrs['coor'] = f.readline()[0:3]
+                elif param[:7] == '#REREAD':
+                    self.attrs['reread']=True
+                elif param[:7] == '#ZEROBX':
+                    setting = f.readline()[0]
+                    self.attrs['zerobx'] = (setting == 'T')
+                elif param[:4] == '#VAR':
+                    self.attrs['var'] = f.readline().split()
+                    self.attrs['std_var']=False
+                elif param[:6] == '#PLANE':
+                    xp = float(f.readline().split()[0])
+                    yp = float(f.readline().split()[0])
+                    self.attrs['plane']=[xp, yp]
+                elif param[:9] == '#POSITION':
+                    yp = float(f.readline().split()[0])
+                    zp = float(f.readline().split()[0])
+                    self.attrs['satxyz'][1:]=(yp, zp)
+                elif param[:13] == '#SATELLITEXYZ':
+                    xp = float(f.readline().split()[0])
+                    yp = float(f.readline().split()[0])
+                    zp = float(f.readline().split()[0])
+                    self.attrs['satxyz']=[xp, yp, zp]
+                elif param[:10] == '#TIMEDELAY':
+                    self.attrs['delay']=float(f.readline().split()[0])
+                elif param[:6] == '#START':
+                    break
                 else:
-                    self.attrs['zerobx']=False
-            elif param[:4] == '#VAR':
-                self.attrs['var']=lines.pop(0).split()
-                self.attrs['std_var']=False
-            elif param[:6] == '#PLANE':
-                xp = float(lines.pop(0).split()[0])
-                yp = float(lines.pop(0).split()[0])
-                self.attrs['plane']=[xp, yp]
-            elif param[:9] == '#POSITION':
-                yp = float(lines.pop(0).split()[0])
-                zp = float(lines.pop(0).split()[0])
-                self.attrs['satxyz'][1:]=(yp, zp)
-            elif param[:13] == '#SATELLITEXYZ':
-                xp = float(lines.pop(0).split()[0])
-                yp = float(lines.pop(0).split()[0])
-                zp = float(lines.pop(0).split()[0])
-                self.attrs['satxyz']=[xp, yp, zp]
-            elif param[:10] == '#TIMEDELAY':
-                self.attrs['delay']=float(lines.pop(0).split()[0])
-            elif param[:6] == '#START':
-                break
-            else:
-                raise Exception('Unknown file parameter: ' + param)
+                    raise Exception('Unknown file parameter: ' + param)
 
+            # Read data
+            indata = np.fromfile(f, sep=' ').reshape(
+                -1, 7 + len(self.attrs['var']))
+        npoints = indata.shape[0]
         # Create containers for data.
-        npoints = len(lines)
-        self['time']=dmarray(zeros(npoints, dtype=object))
+        self['time'] = dmarray(np.empty(npoints, dtype=object))
         for key in self.attrs['var']:
-            self[key]=dmarray(zeros(npoints))
-
-        # Parse data.
-        for i, line in enumerate(lines):
-            parts = line.split()
-            self['time'][i]=(dt.datetime(
-                    int(parts[0]), #year
-                    int(parts[1]), #month
-                    int(parts[2]), #day
-                    int(parts[3]), #hour
-                    int(parts[4]), #min
-                    int(parts[5]), #sec
-                    int(parts[6]) * 1000 #micro seconds
-                    )) 
-            for j, name in enumerate(self.attrs['var']):
-                self[name][i] = float(parts[7+j])
+            self[key] = dmarray(np.empty(npoints, dtype=np.float64))
+        indata[:, 6] *= 1000 # to microseconds
+        self['time'][:] = np.frompyfunc(dt.datetime, 7, 1)(
+            *np.require(indata[:, 0:7], dtype=np.int).transpose())
+        for i, name in enumerate(self.attrs['var']):
+            self[name][:] = indata[:, i + 7]
 
     def write(self, outfile=False):
         '''
@@ -1518,47 +1518,53 @@ class ImfInput(PbData):
             else:
                 outfile='imfinput.dat'
 
-        out = open(outfile, 'w')
+        with open(outfile, 'wb') as out:
         
-        # Convenience variable:
-        var=self.attrs['var']
+            # Convenience variable:
+            var=self.attrs['var']
 
-        # Write the header:
-        out.write('File created on {}\n'.format(dt.datetime.now().isoformat()))
-        for head in self.attrs['header']:
-            out.write(head)
+            # Write the header:
+            out.write('File created on {}\n'.format(dt.datetime.now().isoformat())
+                      .encode())
+            for head in self.attrs['header']:
+                out.write(head.encode())
 
-        # Handle Params:
-        if self.attrs['coor']:
-            out.write('#COOR\n{}\n\n'.format(self.attrs['coor']))
-        if self.attrs['zerobx']:
-            out.write('#ZEROBX\nT\n\n')
-        if self.attrs['reread']:
-            out.write('#REREAD')
-        if not self.attrs['std_var']:
-            out.write('#VAR\n{}\n\n'.format(' '.join(var)))
-        if self.attrs['satxyz'].count(None)<3:
-            xyz = self.attrs['satxyz']
-            if (xyz[0]==None) and (None not in xyz[1:]):
-                out.write('#POSITION\n{0[1]:-6.2f}\n{0[2]:-6.2f}\n\n'.format(xyz))
-            elif None not in xyz:
-                out.write('#SATELLITEXYZ\n{}\n'.format(
-                    ''.join("{:-6.2f}\n".format(n) for n in xyz)))
-        if self.attrs['delay']:
-            out.write('#DELAY\n{:-9.2f}\n\n'.format(self.attrs['delay']))
-        if None not in self.attrs['plane']:
-            out.write('#PLANE\n{}\n'.format(
-                ''.join('{:-6.2f}\n'.format(n)
-                for n in self.attrs['plane'])))
+            # Handle Params:
+            if self.attrs['coor']:
+                out.write('#COOR\n{}\n\n'.format(self.attrs['coor']).encode())
+            if self.attrs['zerobx']:
+                out.write(b'#ZEROBX\nT\n\n')
+            if self.attrs['reread']:
+                out.write(b'#REREAD')
+            if not self.attrs['std_var']:
+                out.write('#VAR\n{}\n\n'.format(' '.join(var)).encode())
+            if self.attrs['satxyz'].count(None)<3:
+                xyz = self.attrs['satxyz']
+                if (xyz[0]==None) and (None not in xyz[1:]):
+                    out.write('#POSITION\n{0[1]:-6.2f}\n{0[2]:-6.2f}\n\n'
+                              .format(xyz).encode())
+                elif None not in xyz:
+                    out.write('#SATELLITEXYZ\n{}\n'.format(
+                        ''.join("{:-6.2f}\n".format(n) for n in xyz)).encode())
+            if self.attrs['delay']:
+                out.write('#DELAY\n{:-9.2f}\n\n'.format(self.attrs['delay'])
+                          .encode())
+            if None not in self.attrs['plane']:
+                out.write('#PLANE\n{}\n'.format(
+                    ''.join('{:-6.2f}\n'.format(n)
+                            for n in self.attrs['plane'])).encode())
 
-        # Write the data:
-        out.write('\n#START\n')
-        for i in range(len(self['time'])):
-            out.write('{:%Y %m %d %H %M %S} {:03d} '.format(
-                self['time'][i], int(round(self['time'][i].microsecond/1000.))))
-            out.write(' {}\n'.format(
-                ' '.join('{:10.2f}'.format(self[key][i]) for key in var)))
-        out.close()
+            # Write the data:
+            out.write(b'\n#START\n')
+            # Round time to millisecond and format it
+            timestr = np.vectorize(
+                lambda t: (t.replace(microsecond=0)
+                + dt.timedelta(microseconds=int(round(t.microsecond, -3))))
+                .strftime('%Y %m %d %H %M %S %f')[:-3] + ' ',
+                otypes=[bytes])(self['time'])
+            outarray = np.column_stack([timestr] + [
+                    np.char.mod('%10.2f', self[key]) for key in var])
+            np.savetxt(out, outarray, delimiter=' ', fmt='%s')
 
     def add_pram_bz(self, target=None, loc=111, pcol='#CC3300', bcol='#3333CC',
                     xlim=None, plim=None, blim=None, epoch=None):

@@ -44,7 +44,6 @@ Contact: Jonathan.Niehof@unh.edu
 
 
 Copyright 2010-2015 Los Alamos National Security, LLC.
-
 """
 
 __contact__ = 'Jon Niehof, Jonathan.Niehof@unh.edu'
@@ -56,6 +55,7 @@ except ImportError:
 import ctypes
 import ctypes.util
 import datetime
+import itertools
 import operator
 import os
 import os.path
@@ -68,6 +68,12 @@ import weakref
 import numpy
 import numpy.ma
 import spacepy.datamodel
+import spacepy.time
+try:
+    import matplotlib.dates
+    HAVE_MATPLOTLIB = True
+except ImportError:
+    HAVE_MATPLOTLIB = False
 
 #Import const AFTER library loaded, so failed load doesn't leave half-imported
 #from . import const
@@ -108,6 +114,7 @@ class Library(object):
         ~Library.epoch16_to_datetime
         ~Library.epoch16_to_epoch
         ~Library.epoch16_to_tt2000
+        ~Library.get_minmax
         ~Library.set_backward
         supports_int8
         ~Library.tt2000_to_datetime
@@ -138,6 +145,7 @@ class Library(object):
     .. automethod:: epoch16_to_datetime
     .. automethod:: epoch16_to_epoch
     .. automethod:: epoch16_to_tt2000
+    .. automethod:: get_minmax
     .. automethod:: set_backward
 
     .. attribute:: supports_int8
@@ -459,6 +467,8 @@ class Library(object):
 
         #Default to V2 CDF
         self.set_backward(True)
+        # User has not explicitly called set_backward
+        self._explicit_backward = False
 
     @staticmethod
     def _find_lib():
@@ -648,6 +658,8 @@ class Library(object):
         ======
         ValueError : if backward=False and underlying CDF library is V2
         """
+        # User has explicitly chosen backward compat or not
+        self._explicit_backward = True
         if self.version[0] < 3:
             if not backward:
                 raise ValueError(
@@ -863,11 +875,29 @@ class Library(object):
         Returns
         =======
         out : double
-            Floating point number representing days since 0001-01-01.
+            Floating point number representing days since matplotlib
+            epoch (usually 0001-01-01 as day 1, or 1970-01-01 as day 0).
+
+        See Also
+        ========
+        matplotlib.dates.date2num, matplotlib.dates.num2date
+
+        Notes
+        =====
+        This number is not portable between versions of matplotlib. The
+        returned value is for the installed version of matplotlib. If
+        matplotlib is not found, the returned value is for matplotlib 3.2
+        and earlier.
         """
         #date2num day 1 is 1/1/1 00UT
         #epoch 1/1/1 00UT is 31622400000.0 (millisecond)
-        return (epoch - 31622400000.0) / (24 * 60 * 60 * 1000.0) + 1.0
+        # So day 0 is 31536000000.0
+        baseepoch = 31536000000.0
+        if HAVE_MATPLOTLIB and hasattr(matplotlib.dates, 'get_epoch'):
+            # Different day 0
+            baseepoch = spacepy.time.Ticktock(matplotlib.dates.get_epoch())\
+                                    .CDF[0]
+        return (epoch - baseepoch) / (24 * 60 * 60 * 1000.0)
 
     def epoch16_to_epoch(self, epoch16):
         """
@@ -1148,6 +1178,56 @@ class Library(object):
         """Convenience function for complaining that TT2000 not supported"""
         raise NotImplementedError(
             'TT2000 functions require CDF library 3.4.0 or later')
+
+    def get_minmax(self, cdftype):
+        """Find minimum, maximum possible value based on CDF type.
+
+        This returns the processed value (e.g. datetimes for Epoch
+        types) because comparisons to EPOCH16s are otherwise
+        difficult.
+
+        Parameters
+        ==========
+        cdftype : int
+            CDF type number from :mod:`~spacepy.pycdf.const`
+
+        Raises
+        ======
+        ValueError : if can't match the type
+
+        Returns
+        =======
+        out : tuple
+            minimum, maximum value supported by type (of type matching the
+            CDF type).
+
+        """
+        try:
+            cdftype = cdftype.value
+        except:
+            pass
+        if cdftype == spacepy.pycdf.const.CDF_EPOCH.value:
+            return (datetime.datetime(1, 1, 1),
+                #Can get asymptotically closer, but why bother
+                datetime.datetime(9999, 12, 31, 23, 59, 59))
+        elif cdftype == spacepy.pycdf.const.CDF_EPOCH16.value:
+            return (datetime.datetime(1, 1, 1),
+                datetime.datetime(9999, 12, 31, 23, 59, 59))
+        elif cdftype == spacepy.pycdf.const.CDF_TIME_TT2000.value:
+            inf = numpy.iinfo(numpy.int64)
+            #Using actual min results in invalid/fill value
+            return (self.tt2000_to_datetime(inf.min + 2),
+                    self.tt2000_to_datetime(inf.max))
+        dtype = spacepy.pycdf.lib.numpytypedict.get(cdftype, None)
+        if dtype is None:
+            raise ValueError('Unknown data type: {}'.format(cdftype))
+        if numpy.issubdtype(dtype, numpy.integer):
+            inf = numpy.iinfo(dtype)
+        elif numpy.issubdtype(dtype, numpy.floating):
+            inf = numpy.finfo(dtype)
+        else:
+            raise ValueError('Unknown data type: {}'.format(cdftype))
+        return (inf.min, inf.max)
 
 
 def download_library():
@@ -1790,15 +1870,14 @@ class CDF(MutableMapping, spacepy.datamodel.MetaMixin):
         @return: True if L{key} is the name of a variable in CDF, else False
         @rtype: Boolean
         """
-        try:
-            foo = self[key]
+        if str is not bytes and isinstance(key, str):
+            key = key.encode('ascii')
+        key = key.rstrip()
+        if key in self._var_nums:
             return True
-        except KeyError as e:
-            expected = str(key) + \
-               ": NO_SUCH_VAR: Named variable not found in this CDF."
-            if expected in e.args:
-                return False
-            raise
+        status = self._call(const.CONFIRM_, const.zVAR_EXISTENCE_, key,
+                            ignore=(const.NO_SUCH_VAR,))
+        return status != const.NO_SUCH_VAR
 
     def __repr__(self):
         """Returns representation of CDF
@@ -1866,7 +1945,12 @@ class CDF(MutableMapping, spacepy.datamodel.MetaMixin):
             Not intended for direct call; pass parameters to
             :py:class:`pycdf.CDF` constructor.
         """
-
+        if not lib._explicit_backward:
+            warnings.warn(
+                'spacepy.pycdf.lib.set_backward not called;'
+                ' making backward-compatible CDF.'
+                ' This default will change in the future.',
+                DeprecationWarning)
         lib.call(const.CREATE_, const.CDF_, self.pathname, ctypes.c_long(0),
                               (ctypes.c_long * 1)(0), ctypes.byref(self._handle))
         self._opened = True
@@ -1983,7 +2067,7 @@ class CDF(MutableMapping, spacepy.datamodel.MetaMixin):
             del self[name]
         self.new(name, type=zVar.type(), recVary=zVar.rv(),
                  dimVarys=zVar.dv(), dims=zVar._dim_sizes(),
-                 n_elements=zVar._nelems())
+                 n_elements=zVar.nelems())
         self[name].compress(*zVar.compress())
         self[name].attrs.clone(zVar.attrs)
         if data:
@@ -2150,10 +2234,9 @@ class CDF(MutableMapping, spacepy.datamodel.MetaMixin):
         """
         return _compress(self, comptype, param)
 
-    def new(self, name, data=None, type=None, recVary=True, dimVarys=None,
+    def new(self, name, data=None, type=None, recVary=None, dimVarys=None,
             dims=None, n_elements=None, compress=None, compress_param=None):
-        """
-        Create a new zVariable in this CDF
+        """Create a new zVariable in this CDF
 
         .. note::
             Either ``data`` or ``type`` must be specified. If type is not
@@ -2167,9 +2250,14 @@ class CDF(MutableMapping, spacepy.datamodel.MetaMixin):
         Other Parameters
         ================
         data
-            data to store in the new variable. If this has a an ``attrs``
-            attribute (e.g., :class:`~spacepy.datamodel.dmarray`), it
-            will be used to populate attributes of the new variable.
+            data to store in the new variable. If this has a an
+            ``attrs`` attribute (e.g.,
+            :class:`~spacepy.datamodel.dmarray`), it will be used to
+            populate attributes of the new variable. Similarly the CDF
+            type, record variance, etc. will, by default, be taken
+            from `data` if it is a
+            :class:`~spacepy.pycdf.VarCopy`. This can be overridden by
+            specifying other keywords.
         type : ctypes.c_long
             CDF type of the variable, from :mod:`~spacepy.pycdf.const`.
             See section 2.5 of the CDF user's guide for more information on
@@ -2204,6 +2292,14 @@ class CDF(MutableMapping, spacepy.datamodel.MetaMixin):
         ValueError : if neither data nor sufficient typing information
                      is provided.
 
+        Warns
+        =====
+        DeprecationWarning
+            if no type is provided and data is datetime, warning that
+            the default will change in the future.
+
+            .. versionadded:: 0.2.2
+
         Notes
         =====
         Any given data may be representable by a range of CDF types; if
@@ -2229,6 +2325,9 @@ class CDF(MutableMapping, spacepy.datamodel.MetaMixin):
         below the millisecond level (rule 1), but otherwise EPOCH is preferred
         (rule 2).
 
+        In the future, CDF_TIME_TT2000 will be the preferred EPOCH type if
+        not specified.
+
         For floats, four-byte is preferred unless eight-byte is required:
 
             #. absolute values between 0 and 3e-39
@@ -2237,7 +2336,26 @@ class CDF(MutableMapping, spacepy.datamodel.MetaMixin):
         This will switch to an eight-byte double in some cases where four bytes
         would be sufficient for IEEE 754 encoding, but where DEC formats would
         require eight.
+
         """
+        if hasattr(data, 'compress'):
+            try:
+                c, cp = data.compress()
+            except: #numpy arrays have "compress" and it behaves differently
+                pass
+            else:
+                if compress is None:
+                    compress = c
+                if compress_param is None:
+                    compress_param = cp
+        #Get defaults from VarCopy if data looks like a VarCopy
+        if recVary is None:
+            recVary = data.rv() if hasattr(data, 'rv') else True
+        #Use dimension variance from the copy if it matches # of dims
+        if dimVarys is None and hasattr(data, 'dv') and hasattr(data, 'shape'):
+            dv = data.dv()
+            if len(dv) + int(recVary) == len(data.shape):
+                dimVarys = dv
         if type in (const.CDF_EPOCH16, const.CDF_INT8, const.CDF_TIME_TT2000) \
                 and self.backward:
             raise ValueError('Cannot use EPOCH16, INT8, or TIME_TT2000 '
@@ -2253,6 +2371,7 @@ class CDF(MutableMapping, spacepy.datamodel.MetaMixin):
             if n_elements is None:
                 n_elements = 1
         else:
+            #This supports getting the type straight from a VarCopy
             (guess_dims, guess_types, guess_elements) = _Hyperslice.types(data)
             if dims is None:
                 if recVary:
@@ -2267,6 +2386,12 @@ class CDF(MutableMapping, spacepy.datamodel.MetaMixin):
                 type = guess_types[0]
                 if type == const.CDF_EPOCH16.value and self.backward:
                     type = const.CDF_EPOCH
+                if type in lib.timetypes and len(guess_types) > 1:
+                    warnings.warn(
+                        'No type specified for time input; assuming {}. This'
+                        ' will change to TT2000 in the future, on systems'
+                        ' which support it.'.format(lib.cdftypenames[type]),
+                        DeprecationWarning)
             if n_elements is None:
                 n_elements = guess_elements
         if dimVarys is None:
@@ -2436,11 +2561,11 @@ class CDF(MutableMapping, spacepy.datamodel.MetaMixin):
         Parameters
         ==========
         attrname : bytes
-            name of the zVariable. Not this is NOT a string in Python 3!
+            name of the attribute. Not this is NOT a string in Python 3!
 
         Raises
         ======
-        CDFError : if variable is not found
+        CDFError : if attribute is not found
 
         Returns
         =======
@@ -2582,6 +2707,55 @@ class CDFCopy(spacepy.datamodel.SpaceData):
         super(CDFCopy, self).__init__(((key, var.copy())
                                       for (key, var) in cdf.items()),
                                       attrs = cdf.attrs.copy())
+
+
+def concatCDF(cdfs, varnames=None, raw=False):
+    """Concatenate data from multiple CDFs
+
+    Reads data from all specified CDFs in order and returns as if they
+    were from a single CDF. The assumption is that the CDFs all have the
+    same structure (same variables, each with the same dimensions and
+    variance.)
+
+    Parameters
+    ----------
+    cdfs : list of :class:`~spacepy.pycdf.Var`
+        Open CDFs, will be read from in order. Must be a list (cannot
+        be an iterable, as all files need to be open).
+    varnames : list of str
+        Names of variables to read (default: all variables in first CDF)
+    raw : bool
+        If True, read variables as raw (don't convert epochs, etc.)
+        Default False.
+
+    Returns
+    -------
+    :class:`~spacepy.datamodel.SpaceData`
+        data concatenated from each CDF, with all attributes from first.
+        Non-record-varying data is also only from first, and record
+        variance is only checked on the first!
+
+    Examples
+    --------
+    Read all data from all CDFs in the current directory. Note that
+    CDFs are closed when their variable goes out of scope.
+
+    >>> import glob
+    >>> import spacepy.pycdf
+    >>> data = spacepy.pycdf.concatCDF([
+    ...     spacepy.pycdf.CDF(f) for f in glob.glob('*.cdf')])
+    """
+    if varnames is None:
+        varnames = list(cdfs[0].keys()) #Iterate over this CDF only once
+    vargetter = lambda f, v: f.raw_var(v) if raw else f[v]
+    return spacepy.datamodel.SpaceData(
+        {v:
+         spacepy.datamodel.dmarray(
+             numpy.concatenate([vargetter(f, v)[...] for f in cdfs]),
+             attrs=vargetter(cdfs[0], v).attrs.copy())
+         if cdfs[0][v].rv() else vargetter(cdfs[0], v).copy()
+        for v in varnames},
+        attrs=cdfs[0].attrs.copy())
 
 
 class Var(MutableSequence, spacepy.datamodel.MetaMixin):
@@ -2832,6 +3006,7 @@ class Var(MutableSequence, spacepy.datamodel.MetaMixin):
         ~Var.dv
         ~Var.insert
         ~Var.name
+        ~Var.nelems
         ~Var.rename
         ~Var.rv
         ~Var.shape
@@ -2846,6 +3021,7 @@ class Var(MutableSequence, spacepy.datamodel.MetaMixin):
     .. automethod:: dv
     .. automethod:: insert
     .. automethod:: name
+    .. automethod:: nelems
     .. automethod:: rename
     .. automethod:: rv
     .. autoattribute:: shape
@@ -3224,7 +3400,7 @@ class Var(MutableSequence, spacepy.datamodel.MetaMixin):
             chartypes = (const.CDF_CHAR.value, const.CDF_UCHAR.value)
             rv = self.rv()
             typestr = lib.cdftypenames[cdftype] + \
-                      ('*' + str(self._nelems()) if cdftype in chartypes else '' )
+                      ('*' + str(self.nelems()) if cdftype in chartypes else '' )
             if rv:
                 sizestr = str([len(self)] + self._dim_sizes())
             else:
@@ -3362,7 +3538,7 @@ class Var(MutableSequence, spacepy.datamodel.MetaMixin):
         """
         cdftype = self.type()
         if cdftype == const.CDF_CHAR.value or cdftype == const.CDF_UCHAR.value:
-            return numpy.dtype('S' + str(self._nelems()))
+            return numpy.dtype('S' + str(self.nelems()))
         try:
             return lib.numpytypedict[cdftype]
         except KeyError:
@@ -3385,7 +3561,7 @@ class Var(MutableSequence, spacepy.datamodel.MetaMixin):
         if new_type != None:
             if not hasattr(new_type, 'value'):
                 new_type = ctypes.c_long(new_type)
-            n_elements = ctypes.c_long(self._nelems())
+            n_elements = ctypes.c_long(self.nelems())
             self._call(const.PUT_, const.zVAR_DATASPEC_,
                        new_type, n_elements)
             self._type = None
@@ -3396,17 +3572,31 @@ class Var(MutableSequence, spacepy.datamodel.MetaMixin):
             self._type = cdftype.value
         return self._type
 
-    def _nelems(self):
+    def nelems(self):
         """Number of elements for each value in this variable
 
         This is the length of strings for CHAR and UCHAR,
         should be 1 otherwise.
-        @return: length of strings
-        @rtype: int
+
+        Returns
+        =======
+        int
+            length of strings
         """
         nelems = ctypes.c_long(0)
         self._call(const.GET_, const.zVAR_NUMELEMS_, ctypes.byref(nelems))
         return nelems.value
+
+    def _nelems(self):
+        """Number of elements for each value in this variable
+
+        .. deprecated:: 0.2.2
+            This method will be removed in the future. Use the public
+            interface `nelems` instead.
+        """
+        warnings.warn("_nelems is deprecated and will be removed. Use nelems.",
+                      DeprecationWarning)
+        return self.nelems()
 
     def name(self):
         """
@@ -3515,7 +3705,7 @@ class Var(MutableSequence, spacepy.datamodel.MetaMixin):
         cdftype = self.type()
         if cdftype in (const.CDF_CHAR.value, const.CDF_UCHAR.value) and \
            str is not bytes and not self._raw:
-            return numpy.dtype('U' + str(self._nelems()))
+            return numpy.dtype('U' + str(self.nelems()))
         if cdftype in (const.CDF_EPOCH.value, const.CDF_EPOCH16.value,
                        const.CDF_TIME_TT2000.value) and not self._raw:
             return numpy.dtype('O')
@@ -3553,8 +3743,7 @@ class Var(MutableSequence, spacepy.datamodel.MetaMixin):
 
 
 class VarCopy(spacepy.datamodel.dmarray):
-    """
-    A list-like copy of the data and attributes in a :class:`Var`
+    """A list-like copy of the data and attributes in a :class:`Var`
 
     Data are in the list elements. CDF attributes are in a dict,
     accessed through :attr:`attrs`. (I.e.,
@@ -3563,10 +3752,36 @@ class VarCopy(spacepy.datamodel.dmarray):
     Do not instantiate this class directly; use :meth:`~Var.copy`
     on an existing :class:`Var`.
 
+    Several methods provide access to details about how the original
+    variable was constructed. This is mostly for making it easier to
+    reproduce the variable by passing it to
+    :meth:`~spacepy.pycdf.CDF.new`. Operations that e.g. change the
+    dimensionality of the copy may make this (or any) metadata out of
+    date; see :meth:`set` to update.
+
+    .. autosummary::
+
+        compress
+        dv
+        nelems
+        rv
+        set
+        type
+
     .. attribute:: attrs
 
        Python dictionary containing attributes copied from the zVar
+
+    .. automethod:: compress
+    .. automethod:: dv
+    .. automethod:: nelems
+    .. automethod:: rv
+    .. automethod:: set
+    .. automethod:: type
+
     """
+    Allowed_Attributes = spacepy.datamodel.dmarray.Allowed_Attributes \
+                         + ['_cdf_meta']
 
     def __new__(cls, zVar):
         """Copies all data and attributes from a zVariable
@@ -3574,7 +3789,104 @@ class VarCopy(spacepy.datamodel.dmarray):
         @param zVar: variable to take data from
         @type zVar: :py:class:`pycdf.Var`
         """
-        return super(VarCopy, cls).__new__(cls, zVar[...], zVar.attrs.copy())
+        obj = super(VarCopy, cls).__new__(cls, zVar[...], zVar.attrs.copy())
+        obj._cdf_meta = {
+            'compress': zVar.compress(),
+            'dv': zVar.dv(),
+            'nelems': zVar.nelems(),
+            'rv': zVar.rv(),
+            'type': zVar.type(),
+            }
+        return obj
+
+    def compress(self, *args, **kwargs):
+        """Gets compression of the variable this was copied from.
+
+        For details on CDF compression, see
+        :meth:`spacepy.pycdf.Var.compress`.
+
+        If any arguments are specified, calls
+        :meth:`numpy.ndarray.compress` instead (as the names conflict)
+
+        Returns
+        =======
+        tuple
+            compression type, parameter currently in effect.
+
+        """
+        if args or kwargs:
+            return super(VarCopy, self).compress(*args, **kwargs)
+        else:
+            return self._cdf_meta['compress']
+
+    def dv(self):
+        """Gets dimension variance of the variable this was copied from.
+
+        Each dimension other than the record dimension may either vary
+        or not.
+
+        Returns
+        =======
+        list of boolean
+            True if that dimension has variance, else False
+
+        """
+        return self._cdf_meta['dv']
+
+    def nelems(self):
+        """Gets number of elements of the variable this was copied from.
+
+        This is usually 1 except for strings, where it is the length of the
+        string.
+
+        Returns
+        =======
+        int
+            Number of elements in parent variable
+        """
+        return self._cdf_meta['nelems']
+
+    def rv(self):
+        """Gets record variance of the variable this was copied from.
+
+        Returns
+        =======
+        boolean
+            True if parent variable was record varying, False if NRV
+        """
+        return self._cdf_meta['rv']
+
+    def set(self, key, value):
+        """Set CDF metadata
+
+        Set the metadata describing the original variable this was
+        copied from. Can be used to update the metadata if
+        transformation of the copy has made it out of date (e.g. by
+        removing dimensions.) There is very little checking done and
+        this function should only be used with care.
+
+        Parameters
+        ==========
+        key : str
+            Which metadata to set; this matches the name of the method
+            used to retrieve it (e.g. use ``type`` to set the CDF type, which
+            is returned by :meth:`type`).
+        value
+            Value to assign to `key`.
+        """
+        if key not in self._cdf_meta:
+            raise KeyError('Invalid CDF metadata key {}'.format(key))
+        self._cdf_meta[key] = value
+
+    def type(self):
+        """Returns CDF type of the variable this was copied from.
+
+        Returns
+        =======
+        int
+            CDF type
+        """
+        return self._cdf_meta['type']
 
 
 class _Hyperslice(object):
@@ -4036,7 +4348,7 @@ class _Hyperslice(object):
                        and const.CDF_INT8 in types:
                     del types[types.index(const.CDF_INT8)]
             else: #float
-                if dims is ():
+                if dims == ():
                     if d != 0 and (abs(d) > 1.7e38 or abs(d) < 3e-39):
                         types = [const.CDF_DOUBLE, const.CDF_REAL8]
                     else:
@@ -4052,6 +4364,30 @@ class _Hyperslice(object):
                         types = [const.CDF_FLOAT, const.CDF_REAL4,
                                  const.CDF_DOUBLE, const.CDF_REAL8]
         types = [t.value if hasattr(t, 'value') else t for t in types]
+        #If data has a type, might be a VarCopy, prefer that type
+        if hasattr(data, 'type'):
+            try:
+                t = data.type()
+            except:
+                t = None
+                pass
+            if t in types:
+                types = [t]
+            #If passed array, types prefers its dtype, so try for compatible
+            #and let type() override
+            elif d is data:
+                try:
+                    _ = data.astype(dtype=lib.numpytypedict[t])
+                except:
+                    pass
+                finally:
+                    types = [t]
+        #And if the VarCopy specifies a number of elements, use that
+        #if compatible
+        if hasattr(data, 'nelems'):
+            ne = data.nelems()
+            if ne > elements:
+                elements = ne
         return (dims, types, elements)
 
     @staticmethod
@@ -4188,7 +4524,7 @@ class Attr(MutableSequence):
             scope = ctypes.c_long(0)
             self._cdf_file._call(const.SELECT_, const.ATTR_,
                                  ctypes.c_long(attr_name))
-            #Because it's possible to create a gAttr Python objecting
+            #Because it's possible to create a gAttr Python object
             #referencing an Attribute with variable scope, and vice-versa,
             #do NOT assume the scope matches
             #(Higher level code checks for that being a bad thing.)
@@ -4337,10 +4673,14 @@ class Attr(MutableSequence):
                 vartype = self._cdf_file[i].type()
                 if vartype in types:
                     entry_type = vartype
-                else:
-                    entry_type = types[0]
-            elif entry_type is None:
+            if entry_type is None:
                 entry_type = types[0]
+                if entry_type in lib.timetypes and len(types) > 1:
+                    warnings.warn(
+                        'Assuming {} for time input. This will change to'
+                        ' TT2000 in the future, on systems which support it.'
+                        .format(lib.cdftypenames[entry_type]),
+                        DeprecationWarning)
             if not entry_type in lib.numpytypedict:
                 raise ValueError('Cannot find a matching numpy type.')
             typelist.append((dims, entry_type, elements))
@@ -4729,20 +5069,23 @@ class Attr(MutableSequence):
         @param elements: number of elements in L{data}, 1 unless it is a string
         @type elements: int
         """
-        if len(dims) == 0:
-            n_write = 1
-        else:
-            n_write = dims[0]
+        n_write = 1 if len(dims) == 0 else dims[0]
         if cdf_type in (const.CDF_CHAR.value, const.CDF_UCHAR.value):
             data = numpy.require(data, requirements=('C', 'A', 'W'),
                                  dtype=numpy.dtype('S' + str(elements)))
             n_write = elements
         elif cdf_type == const.CDF_EPOCH16.value:
+            raw_in = True #Assume each element is pair of floats
             if not self._raw:
                 try:
                     data = lib.v_datetime_to_epoch16(data)
+                    raw_in = False #Nope, not raw, was datetime
                 except AttributeError:
                     pass
+            if raw_in: #Floats passed in, extra dim of (2,)
+                dims = dims[:-1]
+                if len(dims) == 0:
+                    n_write = 1
             data = numpy.require(data, requirements=('C', 'A', 'W'),
                                  dtype=numpy.float64)
         elif cdf_type == const.CDF_EPOCH.value:

@@ -1,3 +1,4 @@
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3252523.svg)](https://doi.org/10.5281/zenodo.3252523)
 [![Build Status](https://api.travis-ci.com/spacepy/spacepy.svg?branch=master)](https://travis-ci.com/spacepy/spacepy)
 
 # SpacePy
@@ -40,8 +41,8 @@ SpacePy supports both Python 2.7 and 3.x.
 ### Dependencies
 
 SpacePy has a number of well-maintained dependencies, most of which are automatically installed by ```pip```. These include:
- - numpy (>=1.6, !=1.15.0)
- - scipy (>=0.10)
+ - numpy (>=1.10, !=1.15.0)
+ - scipy (>=0.11)
  - matplotlib (>=1.5)
  - h5py
 

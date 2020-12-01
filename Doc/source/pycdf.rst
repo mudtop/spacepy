@@ -15,7 +15,10 @@ Contents
     - `Modify a CDF`_
     - `Non record-varying`_
     - `Slicing and indexing`_
-- `Class reference`_
+- `Classes`_
+- `Functions`_
+- `Submodules`_
+- `Data`_
 
 Quickstart
 ----------
@@ -236,8 +239,8 @@ available in the :mod:`~spacepy.pycdf.const` module.
 The underlying C library is represented by the :attr:`~spacepy.pycdf.lib`
 variable.
 
-Class reference
-===============
+Classes
+-------
 
 .. autosummary::
     :template: clean_class.rst
@@ -259,6 +262,28 @@ Class reference
     CDFWarning
     EpochError
 
+Functions
+---------
+
+.. autosummary::
+    :template: clean_function.rst
+    :toctree: autosummary
+
+    concatCDF
+
+Submodules
+----------
+
+.. autosummary::
+    :toctree: autosummary  
+    :template: clean_module.rst
+
+    const
+    istp
+
+Data
+----
+
 .. attribute:: lib
 
     Module global :class:`Library` object.
@@ -269,7 +294,3 @@ Class reference
     >>> from spacepy import pycdf
     >>> pycdf.lib.version
         (3, 3, 0, ' ')
-
-.. attribute:: const
-
-.. automodule:: spacepy.pycdf.const

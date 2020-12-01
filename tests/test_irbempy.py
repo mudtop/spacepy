@@ -79,7 +79,15 @@ class IRBEMBigTests(unittest.TestCase):
         for key in expected:
             numpy.testing.assert_almost_equal(expected[key],
                                               actual[key],
-                                              decimal=5)        
+                                              decimal=5)
+
+    def test_prep_irbem_too_many_PA(self):
+        """Call prep_irbem with too many pitch angles"""
+        with self.assertRaises(ValueError) as cm:
+            ib.prep_irbem(self.ticks, self.loci, numpy.arange(5, 180, 5),
+                          omnivals=self.omnivals)
+        self.assertEqual('Too many pitch angles requested; 25 is maximum.',
+                         str(cm.exception))
 
     def test_find_Bmirror(self):
         expected = {'Blocal': array([ 1031.008992,  3451.98937]),
@@ -107,7 +115,7 @@ class IRBEMBigTests(unittest.TestCase):
     def test_get_Lstar_T01(self):
         # test T01STORM
         expected = {'Xj': array([[ 0.000403], [ 0.00269002]]),
-            'Lstar': array([[ 3.025887], [ 2.0523954]]), 
+            'Lstar': array([[ 3.025887], [ 2.054195]]), 
             'Bmirr': array([[ 1031.008992], [ 3451.98937]]),
             'Lm': array([[ 3.079151], [ 2.059326]]),
             'Bmin': array([ 1030.456337,  3444.077016 ]),
@@ -126,6 +134,40 @@ class IRBEMBigTests(unittest.TestCase):
                     'MLT': array([ 11.97159175,  12.13313906])}
         actual = ib.get_Lstar(self.ticks, self.loci, [70], extMag='T05', omnivals=self.omnivals)
         for key in expected:
+            numpy.testing.assert_almost_equal(expected[key], actual[key], decimal=6)
+
+    def test_get_Lstar_OPQuiet(self):
+        # test OP-Quiet
+        expected = {'Xj': array([[ 0.001051], [ 0.002722]]),
+            'Lstar': array([[ 3.029621], [ 2.059631]]),
+            'Blocal': array([ 1019.052401, 3467.52999]),
+            'Lm': array([[ 3.091352], [ 2.056261]]),
+            'Bmin': array([ 1018.669701,  3459.500966 ]),
+            'MLT': array([ 11.97159175,  12.13313906])}
+        actual = ib.get_Lstar(self.ticks, self.loci, [90], extMag="OPQUIET", omnivals=self.omnivals)
+        for key in expected.keys():
+            numpy.testing.assert_almost_equal(expected[key], actual[key], decimal=6)
+
+    def test_get_Lstar_TooManyPA(self):
+        """test OP-Quiet with too many pitch angles"""
+        with self.assertRaises(ValueError) as cm:
+            ib.get_Lstar(
+                self.ticks, self.loci, numpy.arange(5, 180, 5),
+                extMag="OPQUIET", omnivals=self.omnivals)
+        self.assertEqual('Too many pitch angles requested; 25 is maximum.',
+                         str(cm.exception))
+                
+    def test_get_Lstar_OPQuiet_landi2lstar(self):
+        # test OP-Quiet with LandI2Lstar routine
+        expected = {'Xj': array([[ 0.001051], [ 0.002722]]),
+            'Lstar': array([[3.02419 ], [2.053277]]),
+            'Blocal': array([ 1019.052401,  3467.52999]),
+            'Lm': array([[ 3.091352], [ 2.056261]]),
+            'Bmin': array([ 1018.669701,  3459.500966 ]),
+            'MLT': array([ 11.97159175,  12.13313906])}
+        actual = ib.get_Lstar(self.ticks, self.loci, [90], extMag="OPQUIET", omnivals=self.omnivals,
+                              landi2lstar=True)
+        for key in expected.keys():
             numpy.testing.assert_almost_equal(expected[key], actual[key], decimal=6)
 
     def test_AlphaOfK(self):
@@ -159,11 +201,25 @@ class IRBEMTestsWithoutOMNI(unittest.TestCase):
         self.assertEqual(expected, ib.get_dtype(sysaxes))
 
     def test_get_sysaxes(self):
+        """Test that expected value is returned for sysaxes query"""
         dtype = 'GSE'
-        carsph = 'car'
-        expected = 3
-        self.assertEqual(expected, ib.get_sysaxes(dtype, carsph))
-        
+        self.assertEqual(3, ib.get_sysaxes(dtype, 'car'))
+        self.assertEqual(None, ib.get_sysaxes(dtype, 'sph'))
+
+    def test_prep_irbem_sysaxesnone(self):
+        """prep_irbem should handle 'car' and 'sph' version of systems identically"""
+        locc = spacepy.coordinates.Coords([[3,0,0],[2,0,0]], 'GSM', 'car')
+        out1 = ib.prep_irbem(ticks=self.ticks, loci=locc,
+                             extMag='0', options=[1, 0, 0, 0, 1])
+        pos = ib.car2sph(locc.data)
+        locs = spacepy.coordinates.Coords(pos, 'GSM', 'sph')
+        out2 = ib.prep_irbem(ticks=self.ticks, loci=locs,
+                             extMag='0', options=[1, 0, 0, 0, 1])
+        self.assertEqual(out1['sysaxes'], out2['sysaxes'])
+        numpy.testing.assert_almost_equal(out1['xin1'], out2['xin1'])
+        numpy.testing.assert_almost_equal(out1['xin2'], out2['xin2'])
+        numpy.testing.assert_almost_equal(out1['xin3'], out2['xin3'])
+
     def test_sph2car(self):
         loc = [1,45,45]
         expected = array([ 0.5,  0.5,  0.70710678])	

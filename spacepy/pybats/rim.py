@@ -5,13 +5,34 @@ from the Ridley Ionosphere Model (RIM) and the similar legacy code,
 Ridley Serial.
 
 Copyright 2010 Los Alamos National Security, LLC.
+
+.. rubric:: Classes
+
+.. autosummary::
+    :toctree:
+    :template: clean_class.rst
+
+    Iono
+    OvalDebugFile
+
+.. rubric:: Functions
+
+.. autosummary::
+    :toctree:
+
+    fix_format
+    get_iono_cb
+    tex_label
 '''
 
+import os
 import numpy as np
+from spacepy import deprecated
 import spacepy.plot.apionly
 from spacepy.plot import set_target
 from spacepy.pybats import PbData, dmarray
 
+@deprecated('0.2.2', 'Functionality integrated into `rim.Iono`.')
 def fix_format(filename, finalize=True):
     '''
     Some 2D output files for RIM/RidleySerial have a broken format: values for
@@ -33,9 +54,6 @@ def fix_format(filename, finalize=True):
        run for testing purposes.  Defaults to **True**.
 
     '''
-    
-    import os
-    
     # Slurp in entire file.  This is necessary to detect the number of f.
     f = open(filename, 'r')
     raw = f.readlines()
@@ -250,14 +268,30 @@ class Iono(PbData):
             self['n_'+key] = dmarray(zeros(nPts), {'units':units[key]})
             self['s_'+key] = dmarray(zeros(nPts), {'units':units[key]})
         i = raw.index('BEGIN NORTHERN HEMISPHERE\n')+1
-        # Fill data arrays
-        for j, line in enumerate(raw[i:i+nPts]):
-            parts = line.split()
+
+        # Some compilers insert line breaks automatically when fortran format
+        # string is not adequately specified.  Let's see if that's the
+        # case here: how many lines does it take to cover all variables?
+        nvars, nvarline, nwrap = len(namevar), 0, 0
+        while nvarline<nvars:
+            nvarline += len(raw[i+nwrap].split())
+            nwrap += 1
+        
+        # Fill data arrays:
+        for j in range(nPts):
+            # Build list of variables; accounting for line-wrapping:
+            parts = []
+            iLine = i + j*nwrap
+            for iwrap in range(nwrap):
+                parts += raw[iLine+iwrap].split()
             for k in range(self.attrs['nvars']):
                 self['n_'+namevar[k]][j] = parts[k]
         i = raw.index('BEGIN SOUTHERN HEMISPHERE\n')+1
-        for j, line in enumerate(raw[i:i+nPts]):
-            parts = line.split()
+        for j in range(nPts):
+            parts = []
+            iLine = i + j*nwrap
+            for iwrap in range(nwrap):
+                parts += raw[iLine+iwrap].split()
             for k in range(self.attrs['nvars']):
                 self['s_'+namevar[k]][j] = parts[k]
 

@@ -4,10 +4,8 @@
 """
 Master test suite for SpacePy
 
-version: V1: 28-May-2011
-
-
-Copyright 2010-2014 Los Alamos National Security, LLC.
+Copyright 2010-2014 Triad National Security, LLC.
+Copyright 2015-2020 the contributors
 """
 
 import sys
@@ -26,6 +24,7 @@ from test_coordinates import *
 from test_seapy import *
 from test_poppy import *
 from test_pycdf import *
+from test_pycdf_istp import *
 from test_data_assimilation import *
 from test_spectrogram import *
 from test_irbempy import *

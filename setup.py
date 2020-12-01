@@ -421,7 +421,7 @@ class build(_build):
             return
         # 64 bit or 32 bit?
         bit = len('%x' % sys.maxsize)*4
-        irbemdir = 'irbem-lib-2019-04-04-rev616'
+        irbemdir = 'irbem-lib-2019-04-04-rev620'
         srcdir = os.path.join('spacepy', 'irbempy', irbemdir, 'source')
         outdir = os.path.join(os.path.abspath(self.build_lib),
                               'spacepy', 'irbempy')
@@ -512,11 +512,12 @@ class build(_build):
         olddir = os.getcwd()
         os.chdir(builddir)
         F90files = ['source/onera_desp_lib.f', 'source/CoordTrans.f', 'source/AE8_AP8.f', 'source/find_foot.f',\
-                    'source/drift_bounce_orbit.f']
+                    'source/LAndI2Lstar.f', 'source/drift_bounce_orbit.f']
         functions = ['make_lstar1', 'make_lstar_shell_splitting1', 'find_foot_point1',\
                      'coord_trans1','find_magequator1', 'find_mirror_point1',
                      'get_field1', 'get_ae8_ap8_flux', 'fly_in_nasa_aeap1',
-                     'trace_field_line2_1', 'trace_field_line_towards_earth1', 'trace_drift_bounce_orbit']
+                     'trace_field_line2_1', 'trace_field_line_towards_earth1', 'trace_drift_bounce_orbit',
+                     'landi2lstar1', 'landi2lstar_shell_splitting1']
 
         # call f2py
         cmd = self.f2py + ['--overwrite-signature', '-m', 'irbempylib', '-h',
@@ -547,6 +548,7 @@ class build(_build):
         with open(fln, 'w') as f:
             f.write(filestr)
 
+        print('Building irbem library...')
         # compile (platform dependent)
         os.chdir('source')
         comppath = {
@@ -566,7 +568,8 @@ class build(_build):
         if fcompiler == 'gnu':
             if bit == 64:
                 compflags = '-m64 ' + compflags
-        if fcompiler == 'gnu95':
+        if fcompiler == 'gnu95' and not os.uname()[4].startswith('arm'):
+            # Raspberry Pi doesn't have this switch and assumes 32-bit
             compflags = '-m{0} '.format(bit) + compflags
         if fcompiler.startswith('intel'):
             if bit == 32:
@@ -630,6 +633,9 @@ class build(_build):
             f2py_flags.append('--f77flags=-fno-second-underscore,-mno-align-double')
             if bit == 64:
                 f2py_flags[-1] += ',-m64'
+        if fcompiler == 'gnu95':
+            f2py_flags.extend(['--f77flags=-std=legacy',
+                               '--f90flags=-std=legacy'])
         if self.compiler:
             f2py_flags.append('--compiler={0}'.format(self.compiler))
         if self.f77exec:
@@ -933,7 +939,7 @@ package_data = ['data/*.*', 'pybats/sample_data/*', 'data/LANLstar/*', 'data/TS0
 
 setup_kwargs = {
     'name': 'spacepy',
-    'version': '0.2.0',
+    'version': '0.2.2',
     'description': 'SpacePy: Tools for Space Science Applications',
     'long_description': 'SpacePy: Tools for Space Science Applications',
     'author': 'SpacePy team',
@@ -981,17 +987,20 @@ if not egginfo_only:
 if use_setuptools:
 #Sadly the format here is DIFFERENT than the distutils format
     setup_kwargs['install_requires'] = [
-        'numpy>=1.6',
-        'scipy>=0.10',
+        'numpy>=1.10,!=1.15.0',
+        'scipy>=0.11',
         'matplotlib>=1.5',
-        'h5py',
+        'h5py>=2.6',
         #Do not install ffnet on Windows since there's no binary
         #(people must hand-install)
-        'ffnet;platform_system!="Windows"',
+        'ffnet>=0.7;platform_system!="Windows"',
         #ffnet needs networkx but not marked as requires, so to get it via pip
         #we need to ask for it ourselves
-        'networkx',
-        'python_dateutil',
+        'networkx>=1.0',
+        'python_dateutil>=1.4',
+        # AstroPy is only required to convert to/from AstroPy, so either
+        # user has it or don't care.
+        #'astropy>=1.0',
     ]
 if 'bdist_wheel' in sys.argv:
     setup_kwargs['cmdclass']['bdist_wheel'] = bdist_wheel

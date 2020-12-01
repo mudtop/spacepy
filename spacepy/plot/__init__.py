@@ -56,12 +56,14 @@ Copyright 2011-2016 Los Alamos National Security, LLC.
    spectrogram
    style
    timestamp
+   add_arrows
 
 Most of the functionality in the plot module is made available directly 
 through the *plot* namespace. However, the plot module does contain
 several submodules listed below
 
 .. autosummary::
+    :toctree: autosummary
     :template: clean_module.rst
 
     carrington
@@ -395,7 +397,7 @@ def levelPlot(data, var=None, time=None, levels=(3, 5), target=None, colors=None
         except (IndexError, KeyError):
             #using data array to index, so should just use time
             applySmartTimeTicks(ax, time)
-        ax.grid('off', which='minor') #minor grid usually looks bad on these...
+        ax.grid(False, which='minor') #minor grid usually looks bad on these...
 
     if legend:
         ncols = len(levels)+1

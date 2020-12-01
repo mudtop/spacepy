@@ -36,6 +36,7 @@ Functions
     show_used
     smartTimeTicks
     timestamp
+    add_arrows
 """
 
 __contact__ = 'Jonathan Niehof: jniehof@lanl.gov'
@@ -57,7 +58,7 @@ import numpy
 
 __all__ = ['add_logo', 'annotate_xaxis', 'applySmartTimeTicks', 'collapse_vertical', 'filter_boxes', 
            'smartTimeTicks', 'get_biggest_clear', 'get_clear', 'get_used_boxes', 'EventClicker', 
-           'set_target', 'shared_ylabel', 'show_used', 'timestamp']
+           'set_target', 'shared_ylabel', 'show_used', 'timestamp', 'add_arrows']
 
 class EventClicker(object):
     """
@@ -142,6 +143,30 @@ class EventClicker(object):
     True
     >>> min(troughvals) <= -1.0 #should bottom-out at -1
     True
+
+    >>> import spacepy.plot.utils
+    >>> import spacepy.time
+    >>> import datetime
+    >>> import matplotlib.pyplot as plt
+    >>> import numpy
+    >>> t = spacepy.time.tickrange('2019-01-01', #get a range of days
+    ...                            '2019-12-31',
+    ...                            deltadays=datetime.timedelta(days=1))
+    >>> y = numpy.linspace(0, 100, 1001)
+    >>> seconds = t.TAI - t.TAI[0]
+    >>> seconds = numpy.asarray(seconds) #normal ndarray so reshape (in meshgrid) works
+    >>> tt, yy = numpy.meshgrid(seconds, y) #use TAI to get seconds
+    >>> z = 1 + (numpy.exp(-(yy - 20)**2 / 625) #something like a spectrogram
+    ...          * numpy.sin(1e-7 * numpy.pi**2 * tt)**2) #pi*1e7 seconds per year
+    >>> plt.pcolormesh(t.UTC, y, z)
+    >>> clicker = spacepy.plot.utils.EventClicker(n_phases=1)
+    >>> clicker.analyze() #double-click on center of peak; close
+    >>> events = clicker.get_events() #returns an array of the things clicked
+    >>> len(events) == 10 #10 if you click on the centers, including the last one
+    True
+    >>> clicker.get_events_data() is None #should be nothing
+    True
+
 
     .. autosummary::
          ~EventClicker.analyze
@@ -268,12 +293,18 @@ class EventClicker(object):
         else:
             if not self._line in lines:
                 self._line = None
-                
         if self._line is None:
             self._xdata = None
             self._ydata = None
+            self._xydata = None
             self._autoscale = False
-            self._x_is_datetime = False
+            self._x_is_datetime = isinstance(self.ax.xaxis.converter,
+                                             matplotlib.dates.DateConverter)
+            if self._x_is_datetime:
+                try:
+                    self._tz = self.ax.xaxis.get_major_formatter()._tz
+                except AttributeError:
+                    self._tz = None
         else:
             self._xdata = self._line.get_xdata()
             self._ydata = self._line.get_ydata()
@@ -282,6 +313,7 @@ class EventClicker(object):
             if self._x_is_datetime:
                 self._xydata = numpy.column_stack(
                     (matplotlib.dates.date2num(self._xdata), self._ydata))
+                self._tz = self._xdata[0].tzinfo
             else:
                 self._xydata = numpy.column_stack((self._xdata, self._ydata))
             if self._ymin is None: #Make the clipping comparison always fail
@@ -294,12 +326,21 @@ class EventClicker(object):
         if self.interval is None:
             (left, right) = self.ax.get_xaxis().get_view_interval()
             if self._x_is_datetime:
-                right = matplotlib.dates.num2date(right)
-                left = matplotlib.dates.num2date(left)
+                #For naive datetimes, smash explicitly back to naive;
+                #otherwise it's just replacing with the same.
+                right = matplotlib.dates.num2date(right, tz=self._tz).replace(
+                    tzinfo=self._tz)
+                left = matplotlib.dates.num2date(left, tz=self._tz).replace(
+                    tzinfo=self._tz)
             self.interval = right - left
 
         if not self._xdata is None:
             self._relim(self._xdata[0])
+        elif self._x_is_datetime:
+            #Handle the case of no xdata but we are using a datetime, such as
+            #spectrum data (that's not a line, hence no xdata):
+            self._relim(matplotlib.dates.num2date(self.ax.get_xaxis()\
+                .get_view_interval()[0]).replace(tzinfo=self._tz))
         else:
             self._relim(self.ax.get_xaxis().get_view_interval()[0])
         self._cids = []
@@ -370,7 +411,8 @@ class EventClicker(object):
             self._data_events[-1, self._curr_phase] = \
                                   [self._xdata[idx], self._ydata[idx]]
         if self._x_is_datetime:
-            xval = matplotlib.dates.num2date(xval)
+            xval = matplotlib.dates.num2date(xval, tz=self._tz).replace(
+                tzinfo=self._tz)
         if self._events is None:
             self._events = numpy.array([[[xval, yval]] * self.n_phases])
         self._events[-1, self._curr_phase] = [xval, yval]
@@ -390,9 +432,10 @@ class EventClicker(object):
             self._events.resize((self._events.shape[0] + 1,
                                  self.n_phases, 2
                                  ))
-            self._data_events.resize((self._data_events.shape[0] + 1,
-                                      self.n_phases, 2
-                                      ))
+            if self._data_events is not None:
+                self._data_events.resize((self._data_events.shape[0] + 1,
+                                          self.n_phases, 2
+                                          ))
             self._relim(xval)
         else:
             self.fig.canvas.draw()
@@ -445,7 +488,8 @@ class EventClicker(object):
         if event.key == ' ':
             rightside = self.ax.xaxis.get_view_interval()[1]
             if self._x_is_datetime:
-                rightside = matplotlib.dates.num2date(rightside)
+                rightside = matplotlib.dates.num2date(rightside, tz=self._tz)\
+                    .replace(tzinfo=self._tz)
             self._relim(rightside)
         if event.key == 'delete':
             self._delete_event_phase()
@@ -718,7 +762,7 @@ def set_target(target, figsize=None, loc=None, polar=False):
 
     '''
     # Is target an axes?  Make no new items.
-    if issubclass(type(target), plt.Axes):
+    if isinstance(target, plt.Axes):
         ax  = target
         fig = ax.figure
     else: # Make a new axis
@@ -1357,3 +1401,152 @@ def show_used(fig=None):
                      alpha=0.3, figure=fig, axes=ax, ec='none', fc=next(colors),
                      fill=True)))
     return rects
+
+def add_arrows(lines, n=3, size=12, style='->', dorestrict=False,
+               positions=False):
+    '''
+    Add directional arrows along a plotted line.  Useful for plotting flow
+    lines, magnetic field lines, or other directional traces.
+
+    *lines* can be either :class:`~matplotlib.lines.Line2D`, a list or tuple
+    of lines, or a :class:`~matplotlib.collections.LineCollection` object.
+
+    For each line, arrows will be added using 
+    :method:`~matplotlib.axes.Axes.annotate`.  Arrows will be spread evenly
+    over the line using the number of points in the line as the metric for
+    spacing.  For example, if a line has 120 points and 3 arrows are requested,
+    an arrow will be added at point number 30, 60, and 90.
+    Arrow color and alpha is obtained from the parent line.
+
+    Parameters
+    ==========
+    lines : :class:`~matplotlib.lines.Line2D`, a list/tuple, or :class:`~matplotlib.collections.LineCollection`
+        A single line or group of lines on which to place the arrows.
+        Arrows inherent color and transparency (alpha) from the line on which
+        they are placed.
+
+
+    Other Parameters
+    ================
+    n : integer
+        Number of arrows to add to each line; defaults to 3.
+
+    size : integer
+        The size of the arrows in points.  Defaults to 12.
+
+    style : string
+        Set the style of the arrow via :class:`~matplotlib.patches.ArrowStyle`,
+        e.g. '->' (default) or '-|>'
+
+    dorestrict : boolean
+        If True (default), only points along the line within the current
+        limits of the axes will be considered when distributing arrows.
+
+    positions : Nx2 array
+        N must be the number of lines provided via the argument *lines*.
+        If provided, only one arrow will be placed per line.
+        *positions* sets the explicit location of each arrow for each line as
+        X-Y space in Axes coordinates.
+
+    Returns
+    =======
+    None
+
+    Notes
+    =====
+    The algorithm works by dividing the line in to *n*+1 segments and 
+    placing an arrow between each segment, endpoints excluded.  Arrows span
+    the shortest distance possible, i.e., two adjacent points along a line.
+    For lines that are long spatially but sparse in points, the arrows will
+    have long tails that may extend beyond axes bounds.  For explicit positions,
+    the arrow is placed at the point on the curve closest to that position
+    and the exact position is not always attainable.  A maximum number of arrows
+    equal to one-half of the number of points in a line per line will be
+    created, so not all lines will receive *n* arrows.
+
+    Examples
+    ========
+    >>> import matplotlib.pyplot as plt
+    >>> import numpy as np
+    >>> x = np.arange(1, 10, .01)
+    >>> y = np.sin(x)
+    >>> line = plt.plot(x,y)
+    >>> add_arrows(line, n=15, style='-|>')
+
+    '''
+    from numpy import floor, argmin
+    from matplotlib.collections import LineCollection
+    from matplotlib.lines import Line2D
+    
+    # Convert our line, lines, or LineCollection into
+    # a series of arrays with the x/y data.
+    # Also, grab the axes, colors, and line alpha.
+    def _parse_line_list(lines): #handles lists of lines
+        data = [x.get_xydata() for x in lines]
+        cols = [x.get_color()  for x in lines]
+        alph = [x.get_alpha()  for x in lines]
+        ax   = lines[0].axes
+        return data, cols, alph, ax
+    
+    if hasattr(lines, 'axes'):  # Matplotlib-like objects:
+        try: # Collection-like: use "get paths" to extract points into list
+            ax   = lines.axes
+            data = [x.vertices for x in lines.get_paths()]
+            cols = lines.get_colors()
+            alph = len(data) * [lines.get_alpha()]
+        except AttributeError: # Line2D-like: put in list and parse
+            data, cols, alph, ax = _parse_line_list( [lines] )
+    elif isinstance(lines, (tuple, list)): # List/tuple of Line-like objects:
+        try: 
+            data, cols, alph, ax = _parse_line_list( lines )
+        except AttributeError:
+            raise ValueError('Non-Line2d-like item found in list of lines.')
+    else:
+        raise ValueError('Unknown input type for lines.')
+    
+    # Check to make sure that we have as many colors as lines.
+    # With LineCollections, this isn't always the case!
+    if len(data)>1 and len(cols)==1:
+        cols=list(cols)*len(data)
+
+    # Grab plot limits (sometimes needed):
+    xlim, ylim = ax.get_xlim(), ax.get_ylim()
+
+    if not isinstance(positions, bool):
+        # Explicitly set positions of arrows, one per line.
+        for l, c, a, p in zip(data, cols, alph, positions):
+            # Get x-y points of line:
+            x, y = l[:,0], l[:,1]
+            # Get point on line closest to desired position:
+            i, j = argmin(abs(x - p[0])), argmin(abs(y - p[1]))
+            # Annotate, matching color/alpha:
+            ax.annotate('',xytext=(x[i], y[j]), xy=(x[i+1], y[j+1]), alpha=a,
+                        arrowprops=dict(arrowstyle=style,color=c),size=size)
+        # Nothing else to do at this point.
+        return
+
+    # Get positions for arrows and add them:
+    for l, c, a in zip(data, cols, alph):
+        # Get x-y points of line:
+        x, y = l[:,0], l[:,1]
+        # Restrict to axes limits as necessary:
+        if dorestrict:
+            loc = (x>=xlim[0])&(x<=xlim[1])&(y>=ylim[0])&(y<=ylim[1])
+            x, y = x[loc], y[loc]
+        
+        # Get size of lines.  Skip those with too few points:
+        npts = x.size
+        if npts <= 3: continue
+        
+        # If number of arrows is greater than the number of
+        # points along the line/2, reduce the number of arrows.
+        # Guarantee at least one arrow per line.
+        n_now = max(1, min(n, int(floor(npts/2))) )
+        
+        # Place evenly-spaced arrows:
+        for iArr in range(0,n_now):
+            # Get location as fraction of no. of points along line:
+            i  = int( floor((iArr+1) * npts/(n_now+1)) )
+            # Place an arrow:
+            ax.annotate('',xytext=(x[i], y[i]), xy=(x[i+1], y[i+1]), alpha=a,
+                        arrowprops=dict(arrowstyle=style,color=c),size=size)

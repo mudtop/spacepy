@@ -17,9 +17,10 @@ import unittest
 import numpy as np
 import numpy.testing
 
-import spacepy.pybats as pb
+import spacepy.pybats      as pb
 import spacepy.pybats.bats as pbs
-import spacepy.pybats.ram as ram
+import spacepy.pybats.ram  as ram
+import spacepy.pybats.gitm as gitm
 
 __all__ = ['TestParseFileTime', 'TestIdlFile', 'TestRim', 'TestBats2d',
            'TestMagGrid', 'TestSatOrbit', 'TestVirtSat', 'TestImfInput',
@@ -106,6 +107,15 @@ class TestIdlFile(unittest.TestCase):
 
 
 class TestRim(unittest.TestCase):
+
+    # Solutions for calc_I:
+    knownI = {'n_I'    :2.4567986751877576e-10,
+              'n_Iup'  :0.25176036603984825,
+              'n_Idown':-0.25176036579416844,
+              's_I'    :-8.211648588249157e-10,
+              's_Iup'  :0.2517603660687805,
+              's_Idown':-0.2517603668899454}
+    
     def setUp(self):
         self.pth = os.path.dirname(os.path.abspath(__file__))
 
@@ -113,7 +123,9 @@ class TestRim(unittest.TestCase):
         from spacepy.pybats import rim
 
         # Open file:
-        iono=rim.Iono(os.path.join(self.pth, 'data', 'pybats_test', 'it000321_104510_000.idl.gz'))
+        iono=rim.Iono(os.path.join(self.pth, 'data', 'pybats_test',
+                                   'it000321_104510_000.idl.gz'))
+        
 
     def testReadAscii(self):
         import gzip
@@ -123,7 +135,8 @@ class TestRim(unittest.TestCase):
 
         try:
             # Unzip file and create a copy of it:
-            name_in = os.path.join(self.pth, 'data', 'pybats_test','it000321_104510_000.idl.gz')
+            name_in = os.path.join(self.pth, 'data', 'pybats_test',
+                                   'it000321_104510_000.idl.gz')
             name_out= name_in[:-3]
             with gzip.open(name_in, 'rb') as f_in, open(name_out, 'wb') as f_out:
                 copyfileobj(f_in, f_out)
@@ -133,8 +146,37 @@ class TestRim(unittest.TestCase):
         finally:
             # Remove temp file:
             remove(name_out)
-        
 
+    def testReadWrapped(self):
+        '''Test reading files where entries are wrapped over multiple lines.'''
+        from spacepy.pybats import rim
+        iono = rim.Iono(os.path.join(self.pth, 'data', 'pybats_test',
+                                     'it_wrapped.idl.gz'))
+                
+    def testIonoCalc(self):
+        '''Test calculations made by rim.Iono objects.'''
+        from spacepy.pybats import rim
+
+        iono = rim.Iono(os.path.join(self.pth, 'data', 'pybats_test',
+                                     'it000321_104510_000.idl.gz'))
+        iono.calc_I()
+        for key in self.knownI:
+            self.assertAlmostEqual(self.knownI[key], iono[key])
+
+    def testAddCont(self):
+        from spacepy.pybats import rim
+        import matplotlib as mpl
+        import matplotlib.pyplot as plt
+        
+        iono = rim.Iono(os.path.join(self.pth, 'data', 'pybats_test',
+                                     'it000321_104510_000.idl.gz'))
+        out = iono.add_cont('n_jr', add_cbar=True)
+
+        self.assertTrue(isinstance(out[0], plt.Figure))
+        self.assertTrue(isinstance(out[1], plt.Axes))
+        self.assertTrue(isinstance(out[2], mpl.contour.QuadContourSet))
+        self.assertTrue(isinstance(out[3], mpl.colorbar.Colorbar))
+        
 class TestBats2d(unittest.TestCase):
     '''
     Test functionality of Bats2d objects.
@@ -162,6 +204,40 @@ class TestBats2d(unittest.TestCase):
 
         mhd.calc_all(exclude=['calc_gradP', 'calc_vort'])
 
+    def testPlotting(self):
+        '''
+        Create a contour plot, add stream traces with arrows, 
+        close plot, pass if no Exceptions.  This is a basic test that
+        ensures that all methods and functions underlying contours and
+        field line tracing are at least operating to completion.
+        '''
+
+        import matplotlib.pyplot as plt
+
+        # Test adding a basic contour:
+        fig, ax, cnt, cbar = self.mhd.add_contour('x', 'z', 'p', add_cbar=True)
+
+        # Test adding field lines via "add_b_magsphere":
+        self.mhd.add_b_magsphere(target=ax, narrow=5)
+
+        # Test adding streams via "add_stream_scatter":
+        self.mhd.add_stream_scatter('ux','uz',target=ax,narrow=1)
+
+    def testGetStreamBad(self):
+        """Get a streamline with a start point outside the input grid"""
+        with self.assertRaises(ValueError) as cm:
+            # X range is -220 to 31 (Z==0 is in range)
+            self.mhd.get_stream(50, 0, 'ux', 'uz', method='rk4')
+        self.assertEqual(
+            'Start value 50 out of range for variable x.',
+            str(cm.exception))
+        with self.assertRaises(ValueError) as cm:
+            # Z range is -124 to 124 (X==0 is in range)
+            self.mhd.get_stream(0, 150, 'ux', 'uz', method='rk4')
+        self.assertEqual(
+            'Start value 150 out of range for variable z.',
+            str(cm.exception))
+        
 class TestMagGrid(unittest.TestCase):
     '''
     Test the class :class:`spacepy.pybats.bats.MagGridFile` to ensure opening,
@@ -328,12 +404,32 @@ class TestImfInput(unittest.TestCase):
     knownImfRho  = [5., 15.]
     knownImfTemp = [.80E+05, 1.20E+05]
     knownImfIono = [4.99, 0.01]
+    knownSubMilli= dt.datetime(2017, 9, 6, 16, 42, 37, 0)
 
     def tearDown(self):
         # Remove temporary files.
         for f in glob.glob('*.tmp'):
             os.remove(f)
 
+    def testSubMillisec(self):
+        '''
+        Test case where sub-millisecond time values can create problems on
+        read/write.
+        '''
+        # Create an IMF object from scratch, fill with zeros.
+        imf = pb.ImfInput()
+        for key in imf: imf[key]=[0]
+        
+        # Add a sub-millisecond time:
+        imf['time'] = [dt.datetime(2017,9,6,16,42,36,999600)]
+
+        # Write and test for non-failure on re-read:
+        imf.write('testme.tmp')
+        imf2 = pb.ImfInput('testme.tmp')
+
+        # Test for floor of sub-millisecond times:
+        self.assertEqual(self.knownSubMilli, imf2['time'][0])
+            
     def testWrite(self):
         # Test that files are correctly written to file.
         
@@ -422,6 +518,37 @@ class TestExtraction(unittest.TestCase):
         for x, rho in zip(extr['x'], extr['rho']):
             self.assertAlmostEqual(rho, analytic(x), 2)
 
+
+class TestGitm(unittest.TestCase):
+    '''
+    Test opening GITM binary files, handling files.
+    '''
+    nVars = 13
+    nLat  = 18
+    vers  = 4.03
+    time  = dt.datetime(2015, 3, 16, 20, 1, 8)
+    shape = (18,18)
+    lat1  = 1.48352986
+    
+    def setUp(self):
+        self.pth = os.path.dirname(os.path.abspath(__file__))
+
+    def testBinary(self):
+        '''
+        This tests the ability to open a file and correctly read the attributes and 
+        variables as well as properly reshape the arrays and remove unused dimensions.
+        '''
+        # Open 2D file:
+        f = gitm.GitmBin(os.path.join(self.pth, 'data', 'pybats_test', 'gitm_2D.bin'))
+        # Check some critical attributes/values:
+        self.assertEqual(self.nVars, f.attrs['nVars'])
+        self.assertEqual(self.nLat,  f.attrs['nLat'])
+        self.assertEqual(self.vers,  f.attrs['version'])
+        self.assertEqual(self.time,  f['time'])
+        self.assertEqual(self.shape, f['Longitude'].shape)
+        self.assertAlmostEqual(   self.lat1, f['Latitude'][0,-1], 6)
+        self.assertAlmostEqual(-1*self.lat1, f['Latitude'][0, 0], 6)
+        
 class RampyTests(unittest.TestCase):
     '''
     Tests for pybats.rampy
@@ -442,7 +569,8 @@ class RampyTests(unittest.TestCase):
         '''Test that start time attribute and Time variable are as expected'''
         data = ram.RamSat(self.testfile)
         self.assertEqual(data.starttime, dt.datetime(2012, 10, 29))
-        numpy.testing.assert_array_equal(data['Time'], [60., 120., 180.])
+        tst = [dt.datetime(2012, 10, 29) + dt.timedelta(seconds=sc) for sc in [60, 120, 180]]
+        numpy.testing.assert_array_equal(data['Time'], tst)
 
     def test_RamSat_contents_dims(self):
         '''Test for expected shape of loaded data array'''
@@ -453,8 +581,28 @@ class RampyTests(unittest.TestCase):
         '''Ensure that original flux is unchanged on calculating omni-flux'''
         data = ram.RamSat(self.testfile)
         flux_h = data['FluxH+'].copy()
-        data.create_omniflux()
+        data.create_omniflux(check=False)
         numpy.testing.assert_array_equal(flux_h, data['FluxH+'])
+
+    def test_RamSat_omnicalc_regress(self):
+        '''Regression test for omni flux calculation'''
+        data = ram.RamSat(self.testfile)
+        #remove any precalculated omniflux
+        rmkeys = [key for key in data if key.lower().startswith('omni')]
+        for rmk in rmkeys:
+            del data[rmk]
+        regrH = np.array([0.0000000e+00, 1.4857327e+07, 1.4904620e+07, 1.4523555e+07,
+                          1.3417377e+07, 1.1787100e+07, 9.8903560e+06, 8.0948140e+06,
+                          6.6876425e+06, 5.7112065e+06, 5.0520345e+06, 4.5785050e+06,
+                          4.2270450e+06, 3.9780850e+06, 3.8351362e+06, 3.7873392e+06,
+                          3.9363230e+06, 4.0524422e+06, 2.9526408e+06, 9.0399219e+05,
+                          5.2025672e+05, 2.4965306e+05, 9.1892180e+04, 3.0133383e+04,
+                          1.6105718e+04, 1.4831358e+04, 1.7809768e+04, 2.2456926e+04,
+                          2.5075262e+04, 2.3687787e+04, 1.8142951e+04, 1.0017233e+04,
+                          3.8184448e+03, 1.1123656e+03, 2.2883945e+02], dtype=np.float32)
+        data.create_omniflux(check=False)
+        testarr = np.array(data['omniH'][0].data)
+        numpy.testing.assert_array_almost_equal(regrH, testarr)
 
 if __name__=='__main__':
     unittest.main()
