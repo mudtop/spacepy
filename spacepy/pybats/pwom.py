@@ -506,3 +506,195 @@ class Lines(PbData):
                 
 
         return fig, ax, cont, cbar
+
+
+class slice(PbData):
+    '''
+    Class for loading a pwom 2d sliceoutput file.
+    At instantiation time, user may wish to set the start date and time of 
+    the simulation using the starttime kwarg.  If not given, start time
+    will default to Jan. 1st, 2000, 00:00UT.
+    '''
+    def __init__(self, filename, starttime=None, *args, **kwargs):
+        super(slice, self).__init__(*args, **kwargs) # Init as PbData.
+        self.attrs['file']=filename
+        if not starttime:
+            starttime=dt.datetime(2000,1,1,0,0,0)
+        self._read(starttime)
+
+    def __repr__(self):
+        return 'PWOM 2dslice output file %s' % (self.attrs['file'])
+
+    def _read(self, starttime):
+        '''
+        Read 2d file; should only be called upon instantiation.
+        '''
+
+        # Reads file assuming it is ascii
+        # Slurp whole file.
+        f=open(self.attrs['file'], 'r')
+        lines=f.readlines()
+        f.close()
+            
+        # Determine size of file.
+        nTimes=lines.count(lines[0])
+        nPoints =int((lines[2].split())[0].strip())
+        self.attrs['nPoint']=nPoints; self.attrs['nTime']=nTimes
+        
+        # Start building time array.
+        self['time']=np.zeros(nTimes, dtype=object)
+        
+        # Get variable names; pop radius (altitude).
+        var=(lines[4].split())[1:-1]
+        self._rawvar=var
+        
+        # Get altitude, which is constant at all times.
+        for i, l in enumerate(lines[5:nPoints+5]):
+            # Create 2D arrays for data that is time and Points. dependent.
+            # Set as many units as possible.
+            for v in var:
+                self[v]=dmarray(np.zeros((nTimes, nPoints)))
+                if v=='Lat' or v=='Lon':
+                    self[v].attrs['units']='deg'
+                elif v[0]=='u':
+                    self[v].attrs['units']='km/s'
+                elif v[0:3]=='lgn':
+                    self[v].attrs['units']='log(cm-3)'
+                elif v[0]=='T':
+                    self[v].attrs['units']='K'
+                else:
+                    self[v].attrs['units']=None
+                    
+            # Loop through rest of data to fill arrays.
+            for i in range(nTimes):
+                t=float((lines[i*(nPoints+5)+1].split())[1])
+                self['time'][i]=starttime+dt.timedelta(seconds=t)
+                for j, l in enumerate(lines[i*(nPoints+5)+5:(i+1)*(nPoints+5)]):
+                    parts=l.split()
+                    for k,v in enumerate(var):
+                        self[v][i,j]=float(parts[k+1])
+    def _get_latlon(self):
+        '''
+        For plotting, generate a set of x-y values such that plots can be
+        produced on a cartesian grid using tricontourf.
+        '''
+        
+        # Pass if values already exist.
+        if hasattr(self, '_xLat'):
+            return
+        
+        # Unit conversions.
+        r = 1.0
+        lat   = 0.5*np.pi-np.arccos(abs(self['Z']))
+        colat = 90. - lat*180.0/np.pi
+        lon   = self['Lon']*np.pi/180.0
+        
+        # Values in a Cartesian plane.
+        self._xGSM = -1.0*colat*np.cos(lat)*np.sin(lon)
+        self._yGSM = colat*np.cos(lat)*np.cos(lon)
+        
+        self._xLat = -1.0*colat*np.sin(lon)
+        self._yLat = colat*np.cos(lon)
+        
+    def add_slice(self, var, time, nlev=31, zlim=None, target=None, 
+                  loc=111, title=None, latoffset=1.05,
+                  rlim=50., add_cbar=True, clabel=None,
+                  show_pts=False, dolog=False, 
+                  lats=[75., 60.], colats=None, figsize=(8.34,7),
+                  *args, **kwargs):
+        '''
+        Create a plot of variable *var*.
+
+        If kwarg **target** is None (default), a new figure is 
+        generated from scratch.  If target is a matplotlib Figure
+        object, a new axis is created to fill that figure at subplot
+        location **loc**.  If **target** is a matplotlib Axes object, 
+        the plot is placed into that axis.
+        '''
+
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import (LogNorm, Normalize)
+        from matplotlib.patches import Circle
+        from matplotlib.ticker import (LogLocator, LogFormatter, 
+                                       LogFormatterMathtext, MultipleLocator)
+
+        # Grab the slice of data that we want:
+        if type(time) == type(self['time'][0]):
+            if time not in self['time']:
+                raise ValueError('Time not in object')
+            time = np.arange(self.attrs['nTime'])[self['time']==time][0]
+
+        fig, ax = set_target(target, loc=loc, figsize=figsize)
+        ax.set_aspect('equal')
+
+        # Create values in Cartesian plane.
+        self._get_latlon()
+
+        # Grab values from correct time/location.
+        x = self._xLat[time,:]
+        y = self._yLat[time,:]
+        value = self[var][time,:]
+
+        # Get max/min if none given.
+        if zlim==None:
+            zlim=[0,0]
+            zlim[0]=value.min(); zlim[1]=value.max()
+            if dolog and zlim[0]<=0:
+                zlim[0] = np.min( [0.0001, zlim[1]/1000.0] )
+
+        # Create levels and set norm based on dolog.
+        if dolog:
+            levs = np.power(10, np.linspace(np.log10(zlim[0]), 
+                                            np.log10(zlim[1]), nlev))
+            z=np.where(value>zlim[0], value, 1.01*zlim[0])
+            norm=LogNorm()
+            ticks=LogLocator()
+            fmt=LogFormatterMathtext()
+        else:
+            levs = np.linspace(zlim[0], zlim[1], nlev)
+            z=value
+            norm=None
+            ticks=None
+            fmt=None
+        
+        # Create contour plot.
+        cont=ax.tricontourf(np.asarray(x), np.asarray(y), np.asarray(z), \
+                            np.asarray(levs), *args, norm=norm, **kwargs)
+        
+        if show_pts:
+            ax.plot(x, y, '+w')
+
+        # Add cbar if necessary.
+        if add_cbar:
+            cbar=plt.colorbar(cont, ticks=ticks, format=fmt, pad=0.01)
+            if clabel==None: 
+                clabel="%s (%s)" % (var, self[var].attrs['units'])
+            cbar.set_label(clabel)
+        else:
+            cbar=None # Need to return something, even if none.
+ 
+        # Set title, labels, axis ranges (use defaults where applicable.)
+        if title: ax.set_title(title)
+        ax.set_yticks([]), ax.set_xticks([])
+        ax.set_ylabel(r'Sun $\rightarrow$')
+        colat_lim = 90.-rlim
+        ax.set_xlim([-1*colat_lim, colat_lim])
+        ax.set_ylim([-1*colat_lim, colat_lim])
+
+        if colats:
+            for colat in colats:
+                r = latoffset*colat/np.sqrt(2)
+                ax.add_patch(Circle([0,0],colat,fc='none',ec='k',ls='dashed'))
+                ax.text(r, r, '{:.0f}'.format(colat)+r'$^{\circ}$',
+                        rotation=315,ha='center', va='center')
+        else:
+            for lat in lats:
+                colat = 90 - lat
+                r = latoffset*colat/np.sqrt(2)
+                ax.add_patch(Circle([0,0],colat,fc='none',ec='k',ls='dashed'))
+                ax.text(r, r, '{:.0f}'.format(lat)+r'$^{\circ}$', 
+                        rotation=315,ha='center', va='center')
+                
+
+        return fig, ax, cont, cbar
+
