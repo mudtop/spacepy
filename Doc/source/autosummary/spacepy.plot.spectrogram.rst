@@ -1,6 +1,6 @@
-spacepy.plot.spectrogram
+﻿spacepy.plot.spectrogram
 ========================
 
 .. currentmodule:: spacepy.plot
 
-.. autofunction:: spacepy.plot.spectrogram
+.. automodule:: spacepy.plot.spectrogram
