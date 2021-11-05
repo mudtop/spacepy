@@ -55,16 +55,17 @@ Other functions
     bootHisto
     dictree
     eventTimer
-    feq
     getNamedPath
     human_sort
     hypot
+    indsFromXrange
     interpol
     intsolve
     medAbsDev
     mlt2rad
     normalize
     pmm
+    poisson_fit
     rad2mlt
     windowMean
 
