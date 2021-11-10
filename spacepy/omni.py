@@ -59,6 +59,8 @@ range set the keyword argument interp to False.
 """
 import bisect, re, os
 import sys
+import warnings
+
 import numpy as np
 from spacepy.datamodel import SpaceData, dmarray, dmcopy, unflatten, readJSONheadedASCII, dmfilled, fromHDF5
 from spacepy.toolbox import tOverlapHalf, indsFromXrange
@@ -396,34 +398,24 @@ def omnirange(dbase='QDhourly'):
 # check for omni file during import
 import os, datetime
 from spacepy import DOT_FLN, help
-from spacepy.toolbox import loadpickle
-try:
-    import h5py
-    _ext = '.h5'
-except ImportError:
-    _ext = '.pkl'
+import h5py
 
-#dotfln = os.environ['HOME']+'/.spacepy'
-omnifln = os.path.join(DOT_FLN,'data','omnidata{0}'.format(_ext))
-omni2fln = os.path.join(DOT_FLN,'data','omni2data{0}'.format(_ext))
+omnifln = os.path.join(DOT_FLN,'data','omnidata.h5')
+omni2fln = os.path.join(DOT_FLN,'data','omni2data.h5')
 # Test data is stored relative to the test script
-testfln = os.path.join(os.path.abspath(os.path.dirname(sys.argv[0])),
-                       'data', 'OMNItest{0}'.format(_ext))
-if not os.path.isfile(testfln): # Hope it's relative to current!
-    testfln = os.path.join(os.path.abspath('data'), 'OMNItest{0}'.format(_ext))
+try:
+    import spacepy_testing
+    testfln = os.path.join(spacepy_testing.datadir, 'OMNItest.h5')
+except ImportError:
+    testfln = None
+if testfln is None or not os.path.isfile(testfln):
+    # Hope it's relative to current!
+    testfln = os.path.join(os.path.abspath('data'), 'OMNItest.h5')
 
-if _ext=='.h5':
-    presentQD = h5py.is_hdf5(omnifln)
-    presentO2 = h5py.is_hdf5(omni2fln)
-    if not (presentQD and presentO2):
-        print("Qin-Denton/OMNI2 data not found in current format. This module has limited functionality.")
-        print("Run spacepy.toolbox.update(QDomni=True) to download data")
-else:
-    presentQD = os.path.isfile(omnifln)
-    presentO2 = os.path.isfile(omni2fln)
-    if not (presentQD and presentO2):
-        print("No Qin-Denton/OMNI2 data found. This module has limited functionality.")
-        print("Run spacepy.toolbox.update(QDomni=True) to download data")
-    else:
-        print("Qin-Denton/OMNI2 data not found in current format. This module has limited functionality.")
-        print("Run spacepy.toolbox.update(QDomni=True) to download data")
+presentQD = h5py.is_hdf5(omnifln)
+presentO2 = h5py.is_hdf5(omni2fln)
+if not (presentQD and presentO2):
+    warnings.warn(
+        "Qin-Denton/OMNI2 data not found in current format."
+        " This module has limited functionality."
+        " Run spacepy.toolbox.update(QDomni=True) to download data.")

@@ -2,21 +2,122 @@
 Release Notes
 =============
 
-This document presents the most notable user-level changes in each
-release of SpacePy. The CHANGELOG file in the source distribution
-contains more detail.
+This document presents user-visible changes in each release of SpacePy.
 
 .. contents::
    :depth: 2
    :local:
 
+
+0.3 Series
+==========
+0.3.0 (2021-xx-xx)
+------------------
+
+Deprecations and removals
+*************************
+Colourmaps have been removed from :class:`~spacepy.plot`. The same
+colourmaps (``plasma`` and ``viridis``) have been available in
+matplotlib since at least 1.5. (Deprecated in 0.2.3.)
+
+The old name ``spectrogram`` for :class:`~spacepy.plot.Spectrogram`
+has been removed. (Deprecated in 0.2.2.)
+
+The ``read_ram_dst`` function has been removed from
+:mod:`~spacepy.pybats.ram`, as it operates on files that are no longer
+written by RAM-SCB. (Deprecated in 0.1.6.)
+
+The ``fix_format`` function has been removed from
+:mod:`~spacepy.pybats.rim`; :class:`~spacepy.pybats.rim.Iono` can now
+read these files directly. (Deprecated in 0.2.2.)
+
+The ``from_dict`` method of CDF attribute lists
+(:meth:`~spacepy.pycdf.gAttrList`, :meth:`~spacepy.pycdf.zAttrList`)
+has been removed. Use :meth:`~spacepy.pycdf.AttrList.clone`, which
+supports cloning from dictionaries. (Deprecated in 0.1.5.)
+
+The ``feq`` function has been removed from :mod:`~spacepy.toolbox`;
+use :func:`numpy.isclose`. (Deprecated in 0.2.2.)
+
+Quaternion math functions have been removed from
+:mod:`~spacepy.toolbox`; they are available in
+:mod:`~spacepy.coordinates`. (Deprecated in 0.2.2.)
+
+Other changes
+*************
+:mod:`~spacepy.pycdf` now defaults to creating version 3 (not
+backward-compatible) CDFs if the backward compatible mode is not
+explicitly set (:meth:`~spacepy.pycdf.Library.set_backward`). It still
+issues a warning when creating a CDF if this is not set; this warning
+will be removed in 0.4.0. (Warning added in 0.2.2.)
+
+Similarly, :mod:`~spacepy.pycdf` defaults to TIME_TT2000 when creating
+a time variable or attribute without specifying a type (EPOCH or
+EPOCH16 are used if TT2000 isn't available). A warning is issued when
+doing so; this warning will be removed in 0.4.0. (Warning added in 0.2.2.)
+
 0.2 Series
 ==========
 
-0.2.2 (2020-xx-xx)
+0.2.3 (2021-10-30)
+------------------
+This is the last release of the 0.2 series and the last with full
+support for :doc:`Python 2 <py2k_eol>`. Binary installers (including
+wheels) for :doc:`32-bit Windows <install_windows>` will also end
+after the 0.2 series, as will Windows installers. The only binaries
+for Windows will be 64-bit wheels, installable with ``pip``.
+
+New features
+************
+:mod:`~spacepy.pycdf` now supports variables with sparse records, including
+enabling/disabling sparse records (:meth:`~spacepy.pycdf.Var.sparse`) and
+setting the pad value (:meth:`~spacepy.pycdf.Var.pad`). Thanks Antoine Brunet.
+
+Deprecations and removals
+*************************
+The colourmaps provided in the :mod:`~spacepy.plot` module have been
+deprecated. The same colourmaps have been available in matplotlib since
+at least 1.5, and users who do not directly import the colourmaps should
+see no impact.
+
+Major bugfixes
+**************
+The passing of keyword arguments from :func:`~spacepy.toolbox.bootHisto`
+to :func:`numpy.histogram` and :func:`matplotlib.pyplot.bar` has been fixed.
+
+The check for out-of-date leapseconds in :mod:`~spacepy.time` has been
+fixed (previously warned even when the file was up to date.)
+
+Fixed installation on new versions of setuptools, which removed
+``bdist_wininst`` support (`#530
+<https://github.com/spacepy/spacepy/issues/530>`_).
+
+The handling of library paths on Windows has been updated. This should
+fix situations where :mod:`~spacepy.irbempy` would not import on
+Windows with Python 3.8 or later. This did not seem to be a problem
+with Anaconda, but would sometimes manifest with Python from the app
+store or from `<http://python.org/>`_ (`#507
+<https://github.com/spacepy/spacepy/issues/507>`_)
+
+Other changes
+*************
+Modern leapsecond rules are applied from 1958-1972 rather than
+rounding fractional leapseconds. See :mod:`~spacepy.time` for full
+discussion of leap seconds and other conversion considerations.
+
+The handling of the ``.spacepy`` directory (see :doc:`configuration`)
+has been improved. If the ``SPACEPY`` environment variable is used,
+the directory will be created. The import process also is less fragile
+in the case of a partially-created ``.spacepy`` directory or an
+invalid (e.g. empty) ``spacepy.rc``.
+
+0.2.2 (2020-12-29)
 ------------------
 
-This will be the last release with full support for :doc:`Python 2 <py2k_eol>`.
+The 0.2 series will be the last with full support for :doc:`Python 2
+<py2k_eol>`; 0.2.3 will likely be the last release. Binary installers
+for :doc:`32-bit Windows <install_windows>` will also end after the 0.2
+series.
 
 New features
 ************
@@ -63,6 +164,10 @@ Quaternion math functions have been moved to
 :func:`~spacepy.toolbox.feq` is deprecated; numpy 1.7 added the equivalent
 :func:`~numpy.isclose`.
 
+The :class:`~spacepy.plot.spectrogram` class is now capitalized
+(:class:`~spacepy.plot.Spectrogram`); the old, lower-case variant is
+kept for compatibility but will be removed.
+
 Dependency requirements
 ***********************
 Not all dependencies are required for all functionality; see
@@ -99,7 +204,8 @@ Other changes
 Data sources for leapsecond files and :mod:`~spacepy.omni` Qin-Denton
 files have been updated to provide current sources. If present,
 entries in the :doc:`configuration file <configuration>` will still be
-used instead.
+used instead. A (configurable) warning is issued for out-of-date leapsecond
+files.
 
 The representation of leap second intervals in time systems which
 cannot directly represent them has been changed. Formerly times such

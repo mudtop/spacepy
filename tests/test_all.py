@@ -15,6 +15,8 @@ try:
 except ImportError:
     import unittest as ut
 
+import spacepy_testing
+
 from test_pybats import *
 from test_time import *
 from test_empiricals import *
@@ -35,6 +37,7 @@ from test_plot_utils import *
 from test_rst import *
 from test_lib import *
 from test_ae9ap9 import *
+from test_testing import *
 # add others here as they are written
 
 if __name__ == '__main__':

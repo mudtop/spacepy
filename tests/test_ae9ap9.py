@@ -17,6 +17,7 @@ import shutil
 import tempfile
 import unittest
 
+import spacepy_testing
 from spacepy import ae9ap9
 
 __all__ = ['ae9ap9Tests', ]
@@ -29,8 +30,9 @@ class ae9ap9Tests(unittest.TestCase):
     
     def setUp(self):
         super(ae9ap9Tests, self).setUp()
-        pth = os.path.dirname(os.path.abspath(__file__))
-        self.datafiles = glob.glob(os.path.join(pth, 'data', 'Run1.AE9.CLoutput_mc_fluence_agg_pctile_??.txt'))
+        self.datafiles = glob.glob(os.path.join(
+            spacepy_testing.datadir,
+            'Run1.AE9.CLoutput_mc_fluence_agg_pctile_??.txt'))
         
     def tearDown(self):
         super(ae9ap9Tests, self).tearDown()

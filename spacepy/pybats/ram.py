@@ -9,6 +9,7 @@ import numpy as np
 from scipy.io import netcdf
 
 from spacepy.datamodel import dmarray, SpaceData
+import spacepy.toolbox as tb
 import spacepy.plot.apionly
 from spacepy.plot import set_target, smartTimeTicks, applySmartTimeTicks
 from spacepy.pybats import PbData
@@ -501,6 +502,7 @@ class WeqFile(EfieldFile):
         parts=headlines.split()
         self.UT=float(parts[0])
 
+
 ############################################################################
 class RamSat(SpaceData):
     '''
@@ -541,13 +543,14 @@ class RamSat(SpaceData):
         self.f = netcdf.netcdf_file(self.filename, mode='r', mmap=False)
         self.namevars = list(self.f.variables.keys())
         self.attrs = {}
-        #split off the netCDF attributes from the Python attributes
+        # split off the netCDF attributes from the Python attributes
         for k in dir(self.f):
             if k[0] == '_' or k in ('dimensions', 'filename', 'fp', 'mode',
                                     'use_mmap', 'variables', 'version_byte'):
                 continue
             tmp = getattr(self.f, k)
-            if not callable(tmp): self.attrs[k] = tmp
+            if not callable(tmp):
+                self.attrs[k] = tmp
         # self.filedata contains the raw netcdf_variable objects.
         for var in self.f.variables:
             # New values saved as self[key] are stored in self.data, not
@@ -608,10 +611,10 @@ class RamSat(SpaceData):
             return None
         # Create new flux attributes:
         nTime = self.time.size
-        nPa   = self['pa_grid'].size
+        nPa = self['pa_grid'].size
         nEner = self['energy_grid'].size
-        omnikeys = [('omni{0}'.format(get_species_label(kk)), kk) for kk in self
-                    if get_species_label(kk) is not None]
+        omnikeys = [('omni{0}'.format(get_species_label(kk)), kk)
+                    for kk in self if get_species_label(kk) is not None]
         # Create delta mu, where mu = cos(pitch angle)
         dMu = np.zeros(nPa)
         if 'pa_width' in self:
@@ -625,13 +628,13 @@ class RamSat(SpaceData):
         for omkey, fluxkey in omnikeys:
             self[omkey] = np.zeros((nTime, nEner))
             # Integrate.
-            temp = np.ma.masked_where(self[fluxkey]<=0, self[fluxkey])
+            temp = np.ma.masked_where(self[fluxkey] <= 0, self[fluxkey])
             self[omkey] = (temp * np.reshape(dMu, (1, -1, 1))).sum(axis=1)
 
             # Mask out bad values.
-            self[omkey] = np.ma.masked_where(self[omkey]<=0, self[omkey])
+            self[omkey] = np.ma.masked_where(self[omkey] <= 0, self[omkey])
 
-    #####RamSat Viz Routines#####
+    # RamSat Viz Routines #
     def _orbit_formatter(self, x, pos):
         '''
         A function that, when passed to the FuncFormatter class of
@@ -657,15 +660,14 @@ class RamSat(SpaceData):
             return(fmtstring)
 
         # Get local time from XY coords.
-        x = self['SM_xyz'][index,0]
-        y = self['SM_xyz'][index,1]
-        z = self['SM_xyz'][index,2]
+        x = self['SM_xyz'][index, 0]
+        y = self['SM_xyz'][index, 1]
+        z = self['SM_xyz'][index, 2]
         R = np.sqrt(y**2 + x**2 + z**2)
-        Mlat  = 180.0*np.arcsin(z/R)/np.pi
-        theta = 180.0*np.sign(y)*np.arccos(x/np.sqrt(y**2+x**2))/np.pi
-        theta = np.mod(theta, 360.0)
-        locHr = np.floor(theta/15.0)
-        locMn = int(60.0 * (theta/15.0 - locHr))
+        Mlat = np.rad2deg(np.arcsin(z/R))
+        fltMLT = tb.rad2mlt(np.arctan2(y, x)) % 24
+        locHr = np.floor(fltMLT).astype(int)
+        locMn = np.round((fltMLT - locHr)*60).astype(int)
 
         # Build format string.
         fmtstring = \
@@ -718,19 +720,19 @@ class RamSat(SpaceData):
         if not plane.upper() in ('XY','XZ','YZ'):
             raise ValueError("{0} is not a valid plot plane.".format(plane))
 
-        fig, ax = set_target(target, loc=loc, figsize=(5,5))
+        fig, ax = set_target(target, loc=loc, figsize=(5, 5))
 
         # Variables to map plot plane to correct variables:
         plane = plane.upper()
-        ijk = {'X':0, 'Y':1, 'Z':2}
+        ijk = {'X': 0, 'Y': 1, 'Z': 2}
         i = ijk[plane[0]]
         j = ijk[plane[1]]
 
         if not timelim:
-        # Set default time limit if none given.
+            # Set default time limit if none given.
             timelim = [self.time[0], self.time[-1]]
-            iMin=0
-            iMax=-1
+            iMin = 0
+            iMax = -1
         else:
             # Use timelim to get indices that bound our plots.
             timediff = abs(self.time - timelim[-1])
@@ -739,18 +741,20 @@ class RamSat(SpaceData):
             iMin = np.nonzero(timediff == timediff.min())[0][0]
 
         # Add orbit:
-        ax.plot(self['SM_xyz'][iMin:iMax,i], self['SM_xyz'][iMin:iMax,j],ls)
+        ax.plot(self['SM_xyz'][iMin:iMax, i],
+                self['SM_xyz'][iMin:iMax, j],
+                ls)
         # Add body:
-        add_body(ax,add_night=(plane!='YZ'))
+        add_body(ax, add_night=(plane != 'YZ'))
 
         # Axis details:
         ax.axis('equal')
-        if plane.upper() in ('XY','XZ') and invertX:
+        if plane.upper() in ('XY', 'XZ') and invertX:
             xmin, xmax = ax.get_xlim()
             if xmin < xmax:
                 ax.invert_xaxis()
-        ax.set_xlabel('SM %s'%(plane[0]))
-        ax.set_ylabel('SM %s'%(plane[1]))
+        ax.set_xlabel('SM %s' % (plane[0]))
+        ax.set_ylabel('SM %s' % (plane[1]))
         if title:
             ax.set_title(title)
         grid_zeros(ax)
@@ -758,7 +762,7 @@ class RamSat(SpaceData):
 
         return fig, ax
 
-    def add_omniflux_plot(self, nameflux, target=None, zlim=[1E4,1E9],
+    def add_omniflux_plot(self, nameflux, target=None, zlim=[1E4, 1E9],
                           add_cbar=True, do_orbticks=False, title=False,
                           timelim=False, loc=111, no_xlabels=False):
         """
@@ -770,8 +774,6 @@ class RamSat(SpaceData):
 
         Other Parameters
         ================
-
-
         target : Figure or Axes
              If None (default), a new figure is generated from scratch.
              If a matplotlib Figure object, a new axis is created
@@ -797,43 +799,44 @@ class RamSat(SpaceData):
         """
 
         import matplotlib.pyplot as plt
-        from matplotlib.colors  import LogNorm
+        from matplotlib.colors import LogNorm
         from matplotlib.ticker import (FuncFormatter, LogLocator,
                                        LogFormatterMathtext)
         from matplotlib.dates import date2num
 
-        fig, ax = set_target(target, loc=loc, figsize=(10,4))
+        fig, ax = set_target(target, loc=loc, figsize=(10, 4))
 
         # Check for omni fluxes, calculate as necessary.
-        if not nameflux in self:
+        if nameflux not in self:
             self.create_omniflux()
-            if not nameflux in self:
+            if nameflux not in self:
                 raise KeyError('%s is not a valid omnidirectional flux.'
                                % nameflux)
         # Create a time vector that binds each pixel correctly.
-        time=np.zeros(self.time.size+1)
-        time[0]=date2num(self.time[0]-dt.timedelta(seconds=self.dt/2.0))
-        time[1:]=date2num(self.time+dt.timedelta(seconds=self.dt/2.0))
-        #egrid=self['energy_grid']
-        ecenter, eboundary, ewidth=gen_egrid(nE=self['energy_grid'].size)
-        #print("Need better energy grid setup for pcolormesh.")
-        flx = ax.pcolormesh(time, eboundary, np.asarray(self[nameflux]).transpose(),
+        time = np.zeros(self.time.size+1)
+        time[0] = date2num(self.time[0]-dt.timedelta(seconds=self.dt/2.0))
+        time[1:] = date2num(self.time+dt.timedelta(seconds=self.dt/2.0))
+        # egrid = self['energy_grid']
+        ecenter, eboundary, ewidth = gen_egrid(nE=self['energy_grid'].size)
+        # print("Need better energy grid setup for pcolormesh.")
+        flx = ax.pcolormesh(time, eboundary,
+                            np.asarray(self[nameflux]).transpose(),
                             norm=LogNorm(), vmin=zlim[0], vmax=zlim[1])
         ax.set_yscale('log')
-        ax.set_ylim( [eboundary[0], eboundary[-1]] )
+        ax.set_ylim([eboundary[0], eboundary[-1]])
         if not timelim:
-            timelim=[self.time[0], self.time[-1]]
+            timelim = [self.time[0], self.time[-1]]
         applySmartTimeTicks(ax, timelim, dolabel=True)
         if no_xlabels:
             ax.set_xlabel('')
             ax.set_xticklabels([''])
-            do_orbticks=False
+            do_orbticks = False
         ax.set_ylabel('E ($keV$)')
-        if title:  #If title not set, use a default:
+        if title:  # If title not set, use a default:
             ax.set_title(title)
         else:
-            labels={'omniH':'H$^{+}$','omniHe':'He$^{+}$',
-                    'omniO':'O$^{+}$','omnie':'e$^{-}$'}
+            labels = {'omniH': 'H$^{+}$', 'omniHe': 'He$^{+}$',
+                      'omniO': 'O$^{+}$', 'omnie': 'e$^{-}$'}
             ax.set_title('Omnidirectional %s Flux' % (labels[nameflux]))
         if do_orbticks:
             ax.xaxis.set_major_formatter(FuncFormatter(self._orbit_formatter))
@@ -842,7 +845,7 @@ class RamSat(SpaceData):
                                 format=LogFormatterMathtext(), ax=ax)
             cbar.set_label('$cm^{-2}s^{-1}keV^{-1}$')
         else:
-            cbar=False
+            cbar = False
 
         return fig, ax, flx, cbar
 
@@ -883,23 +886,23 @@ class RamSat(SpaceData):
         import matplotlib.pyplot as plt
         import matplotlib.gridspec as gridspec
 
-        fig=plt.figure(figsize=(11,7))
+        fig = plt.figure(figsize=(11, 7))
         fig.subplots_adjust(left=0.07, right=0.99, bottom=0.19,
                             top=0.94, wspace=0.4, hspace=0.25)
-        gs=gridspec.GridSpec(3,3)
+        gs = gridspec.GridSpec(3, 3)
 
         # Do orbits first.
-        a1=fig.add_subplot(gs[0,0])
-        a2=fig.add_subplot(gs[1,0])
-        a3=fig.add_subplot(gs[2,0])
+        a1 = fig.add_subplot(gs[0, 0])
+        a2 = fig.add_subplot(gs[1, 0])
+        a3 = fig.add_subplot(gs[2, 0])
         self.add_orbit_plot('XY', target=a1)
         self.add_orbit_plot('XZ', target=a2)
         self.add_orbit_plot('YZ', target=a3)
 
         # Add fluxes.
-        a1=fig.add_subplot(gs[0,1:])
-        a2=fig.add_subplot(gs[1,1:])
-        a3=fig.add_subplot(gs[2,1:])
+        a1 = fig.add_subplot(gs[0, 1:])
+        a2 = fig.add_subplot(gs[1, 1:])
+        a3 = fig.add_subplot(gs[2, 1:])
         if eflux_opts is None:
             eflux_opts = {}
         if hflux_opts is None:
@@ -910,7 +913,7 @@ class RamSat(SpaceData):
             flux_opts = {}
         for k in flux_opts:
             for d in (eflux_opts, hflux_opts, oflux_opts):
-                if not k in d:
+                if k not in d:
                     d[k] = flux_opts[k]
         self.add_omniflux_plot('omnie', target=a1, no_xlabels=True,
                                **eflux_opts)
@@ -920,6 +923,7 @@ class RamSat(SpaceData):
                                **oflux_opts)
 
         return fig
+
 
 ############################################################################
 class PlasmaBoundary(PbData):
@@ -1158,50 +1162,74 @@ class PressureFile(PbData):
         self.attrs['file'] = filename
 
         # Read and parse file.
-        f = open(filename, 'r')
-        lines = f.readlines()
-        f.close()
+        with open(filename, 'r') as fh:
+            lines = fh.readlines()
+        head_entries = lines[1].strip().split()
+        variables = head_entries[:-1]
+        p_unit = head_entries[-1].replace('[', '').replace(']', '')
+
+        def name_map(namein):
+            '''convert RAM pressure file pressure variable names to SpacePy names
+
+            This module uses pressure variable names "per[species]" for perpendicular
+            pressure and "par[species]" for parallel pressure.
+            The species names use the case (e.g., helium is He) and electrons are
+            always given as a lower case "e". In the RAM pressure files the variables
+            are "PPAR_[species]" where the species use title case.
+
+            Examples
+            --------
+            >>> name_map('PPAR_E')
+            'pare'
+            >>> name_map('PPER_He')
+            'perHe'
+            >>> name_map('PTotal')
+            'total'
+            '''
+            # generic as RAM can now use specified list of named species
+            parts = namein.split('_')
+            n_parts = len(parts)
+            # Is a species name present?
+            spec = parts[1] if n_parts == 2 else ''
+            # Is it a pressure? Drop leading P
+            if namein.lower().startswith('p'):
+                varname = parts[0][1:].lower()
+            else:
+                varname = parts[0].lower()
+            # Is it electrons? Make sure the name is lower case
+            if spec and spec.lower() == 'e':
+                spec = 'e'
+            return ''.join([varname, spec])
 
         # Create variables:
         nRec = len(lines[2:])
-        self['L']     = dmarray(np.zeros(nRec), attrs={'units': 'RE'})
-        self['mlt']   = dmarray(np.zeros(nRec), attrs={'units': 'Hours'})
-        self['perH']  = dmarray(np.zeros(nRec), attrs={'units': 'keV/cm-3'})
-        self['parH']  = dmarray(np.zeros(nRec), attrs={'units': 'keV/cm-3'})
-        self['perO']  = dmarray(np.zeros(nRec), attrs={'units': 'keV/cm-3'})
-        self['parO']  = dmarray(np.zeros(nRec), attrs={'units': 'keV/cm-3'})
-        self['perHe'] = dmarray(np.zeros(nRec), attrs={'units': 'keV/cm-3'})
-        self['parHe'] = dmarray(np.zeros(nRec), attrs={'units': 'keV/cm-3'})
-        self['pere']  = dmarray(np.zeros(nRec), attrs={'units': 'keV/cm-3'})
-        self['pare']  = dmarray(np.zeros(nRec), attrs={'units': 'keV/cm-3'})
-        self['total'] = dmarray(np.zeros(nRec), attrs={'units': 'keV/cm-3'})
+        varlist = []
+        varidx = []
+        for idx, vname in enumerate(variables):
+            if vname.lower() == 'lsh':
+                varlist.append('L')
+                varidx.append(idx)
+                self['L']     = dmarray(np.zeros(nRec), attrs={'units': 'RE'})
+            elif vname.lower() == 'mlt':
+                varlist.append('mlt')
+                varidx.append(idx)
+                self['mlt']   = dmarray(np.zeros(nRec), attrs={'units': 'Hours'})
+            else:
+                ent_name = name_map(vname)
+                varlist.append(ent_name)
+                varidx.append(idx)
+                self[ent_name]  = dmarray(np.zeros(nRec), attrs={'units': p_unit})
 
         try:
             self.attrs['time'] = parse(lines[0][5:28], fuzzy=True)
         except:
             self.attrs['time'] = 'unknown'
 
-        # Are electron values included?
-        do_elec = 'PPAR_e' in lines[1]
-
-        # This needs to be re-written with a smart loop.
-        # Use a list of variable strings, append e values if used.
+        # Loop over all variables and grab value from correct column
         for i, line in enumerate(lines[2:]): #Skip header.
             parts = line.split()
-            self['L'][i]     = parts[0]
-            self['mlt'][i]   = parts[1]
-            self['perH'][i]  = parts[2]
-            self['parH'][i]  = parts[3]
-            self['perO'][i]  = parts[4]
-            self['parO'][i]  = parts[5]
-            self['perHe'][i] = parts[6]
-            self['parHe'][i] = parts[7]
-            if do_elec:
-                self['pere'][i]  = parts[8]
-                self['pare'][i]  = parts[9]
-                self['total'][i] = parts[10]
-            else:
-                self['total'][i] = parts[8]
+            for lidx, vnam in zip(varidx, varlist):
+                self[vnam][i]     = parts[lidx]
 
         # Theta is an angle used for polar plots.
         self['theta'] = self['mlt']*np.pi/12.0 - np.pi/2.0
@@ -1214,38 +1242,23 @@ class PressureFile(PbData):
         self.attrs['dL'] = self['L'][self.attrs['nTheta']] - self['L'][0]
 
         # Calculate isotropic pressures and anisotropies.
-        self['totH']  = (2./3.)*self['perH'] +(1./3.)*self['parH']
-        self['totHe'] = (2./3.)*self['perHe']+(1./3.)*self['parHe']
-        self['totO']  = (2./3.)*self['perO'] +(1./3.)*self['parO']
-        self['tote']  = (2./3.)*self['pere'] +(1./3.)*self['pare']
-        self['anie']  = self['pere']  / self['pare']  - 1.0
-        self['aniH']  = self['perH']  / self['parH']  - 1.0
-        self['aniHe'] = self['perHe'] / self['parHe'] - 1.0
-        self['aniO']  = self['perO']  / self['parO']  - 1.0
-
-        # Isotropy units.
-        self['anie'].attrs  = {'units':''}
-        self['aniH'].attrs  = {'units':''}
-        self['aniHe'].attrs = {'units':''}
-        self['aniO'].attrs  = {'units':''}
-
-        # Labels for plots.
+        # Calculate totals, set labels and metadata
         self.labels = {}
-        self['pere'].attrs['label']  = r'$\bot$ Pressure, e$^{-}$'
-        self['pare'].attrs['label']  = r'$\parallel$ Pressure, e$^{-}$'
-        self['tote'].attrs['label']  = r'Pressure, e$^{-}$'
-        self['perH'].attrs['label']  = r'$\bot$ Pressure, H$^{+}$'
-        self['parH'].attrs['label']  = r'$\parallel$ Pressure, H$^{+}$'
-        self['totH'].attrs['label']  = r'Pressure, H$^{+}$'
-        self['aniH'].attrs['label']  = r'Anisotropy, H$^{+}$'
-        self['perHe'].attrs['label'] = r'$\bot$ Pressure, He$^{+}$'
-        self['parHe'].attrs['label'] = r'$\parallel$ Pressure, He$^{+}$'
-        self['totHe'].attrs['label'] = r'Pressure, He$^{+}$'
-        self['aniHe'].attrs['label'] = r'Anisotropy, He$^{+}$'
-        self['perO'].attrs['label']  = r'$\bot$ Pressure, O$^{+}$'
-        self['parO'].attrs['label']  = r'$\parallel$ Pressure, O$^{+}$'
-        self['totO'].attrs['label']  = r'Pressure, O$^{+}$'
-        self['aniO'].attrs['label']  = r'Anisotropy, O$^{+}$'
+        parallels = [key for key in self if key.startswith('par')]
+        for var in parallels:
+            spec = var[3:]  # species is everything after the "par"a
+            if spec == 'e':
+                texspec = 'e$^{-}$'
+            else:
+                texspec = spec + '$^{+}$'  # for now assume all singly ionized
+            self['tot' + spec]  = (2./3.)*self['per' + spec] +(1./3.)*self['par' + spec]
+            self['ani' + spec]  = self['per' + spec]  / self['par' + spec]  - 1.0
+            self['tot' + spec].attrs = {'units': ''}  # Isotropy units
+            self['per' + spec].attrs['label']  = r'$\bot$ Pressure, ' + texspec
+            self['par' + spec].attrs['label']  = r'$\parallel$ Pressure, ' + texspec
+            self['tot' + spec].attrs['label']  = r'Pressure, ' + texspec
+            self['ani' + spec].attrs['label']  = r'Anisotropy, ' + texspec
+
         self['total'].attrs['label'] = r'Total Pressure'
 
 
@@ -1319,7 +1332,7 @@ class PressureFile(PbData):
         # Set up color bar & levels.
         levs = np.power(10, np.linspace(np.log10(minz), np.log10(maxz), n))
         minz = 0.01
-        cont = ax.tricontourf(self['theta'], self['L'], p, levs,
+        cont = ax.tricontourf(self['theta'], self['L'], np.asarray(p), levs,
                               norm=LogNorm(), cmap=cmap)
         _adjust_dialplot(ax, self['L'], title=title, labelsize=labelsize)
         if add_cbar:
@@ -1396,8 +1409,8 @@ class PressureFile(PbData):
         T = T-np.pi/2.0
         R = np.linspace(self['L'][0]-dL/2.0,self['L'][-1]+dL/2.0,self.attrs['nL']+1)
         p = np.reshape(self[var], [self.attrs['nL'], self.attrs['nTheta']])
-        pcol = ax.pcolormesh(T, R, p[:,:-1], norm=LogNorm(),
-                             vmin=minz, vmax=maxz, cmap=get_cmap('inferno'))
+        pcol = ax.pcolormesh(T, R, p[:,:-1], norm=LogNorm(vmin=minz, vmax=maxz),
+                             cmap=get_cmap('inferno'))
         _adjust_dialplot(ax, R, title=title, labelsize=15)
         if add_cbar:
             cbar = colorbar(pcol, pad=0.1, ticks=LogLocator(), ax=ax,

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-Time conversion, manipulation and implementation of Ticktock class
+"""Time conversion, manipulation and implementation of Ticktock class
 
 Notes
 =====
@@ -30,20 +29,32 @@ on 2009-01-01 is two seconds, but only represents a one-second increment in
 Unix time. Details are also discussed in the individual time representations.
 
 UTC times more than six months in the future are not well-defined, since
-the sechedule of leap second insertion is not known in advance. SpacePy
+the schedule of leap second insertion is not known in advance. SpacePy
 performs conversions assuming there are no leapseconds after those which have
 been announced by IERS.
 
-Between 1960 and 1972, UTC was defined by means of fractional leap seconds
-and a varying-length second. SpacePy treats UTC time in this period similar
-to after 1972, with a consistent second the same length of the SI second.
-It applies leap seconds wherever there is an entry in the USNO record of
-TAI-UTC, rounding fractional total leap second countss to the integer (0.5
-rounds up). This results in the application of six leap seconds at the
-beginning of 1972. The discrepancy with other means of calculating TAI-UTC
-may be as much as five seconds at the end of this period.
+Between 1960 and 1972, UTC was defined by means of fractional leap
+seconds and a varying-length second. From 1958 (when UTC was set equal
+to TAI) and 1972, SpacePy treats UTC time similar to after 1972, with
+a consistent second the same length of the SI second, and applying a
+full leap second before the beginning of January and July if UTC - UT1
+exceeded 0.4s. The difference with other methods of calculating UTC is
+less than half a second.
 
-Before 1960, UTC is not defined. SpacePy assumes days of constant length
+.. versionchanged:: 0.2.3
+   The application of post-1972 rules to 1958-1927 is new in
+   0.2.3. Before, SpacePy applied leap seconds wherever there was an
+   entry in the USNO record of TAI-UTC, rounding fractional total leap
+   second counts to the integer (0.5 rounds up). The UTC second was still
+   treated as the same length as the SI second (i.e., rate changed were
+   not applied.) This resulted in the application of six leap seconds at
+   the beginning of 1972. The discrepancy with other means of calculating
+   TAI-UTC was as much as five seconds by the end of this period.
+
+.. versionchanged:: 0.2.2
+   Before 0.2.2, SpacePy truncated fractional leapseconds rather than rounding.
+
+Before 1958, UTC is not defined. SpacePy assumes days of constant length
 86400 seconds, equal to the SI second. This is almost guaranteed to be wrong;
 for times well out of the space era, it is strongly recommended to work
 consistently in either a continuous time system (e.g. TAI) or a day-based
@@ -54,7 +65,7 @@ calendar and dates including and before 1582-10-04 to be Julian. 10-05 through
 10-14 do not exist. This change is ignored for continuously-running non leap
 second aware timebases: CDF and RDT.
 
-See the ``Ticktock`` documentation and its various ``get`` functions for
+See the :class:`Ticktock` documentation and its various ``get`` functions for
 more details on the exact definitions of time systems used by SpacePy.
 
 Examples:
@@ -139,7 +150,10 @@ Contact: smorley@lanl.gov,
 
 
 Copyright 2010 Los Alamos National Security, LLC.
+
 """
+from __future__ import absolute_import
+
 import bisect
 try:
     from collections.abc import Callable, MutableSequence
@@ -153,6 +167,7 @@ except ImportError:
     pass  # just use system zip. In python3 itertools.izip is just python zip
 import os.path
 import re
+import time
 import warnings
 
 try:
@@ -1142,7 +1157,7 @@ class Ticktock(MutableSequence):
 
         Notes
         =====
-        This is based on the UTC day, defined as JD(UTC) - 2 400 000.5,
+        This is based on the UTC day, defined as JD(UTC),
         per the recommendation
         of `IAU General Assembly XXIII resolution B1
         <https://www.iers.org/IERS/EN/Science/Recommendations/
@@ -1798,7 +1813,7 @@ class Ticktock(MutableSequence):
 
         See Also
         ========
-        datetime.date.today()
+        datetime.date.today
 
         """
         warnings.warn('today() returns UTC day as of 0.2.2.',
@@ -2246,29 +2261,92 @@ def valid_YYYYMMDD(inval):
         return False
 
 
-def _read_leaps():
+def _leapsgood(now, filetime, lastleap):
+    """Determines if leap seconds are up-to-date
+
+    Parameters
+    ----------
+    now : datetime.datetime
+        Current time (UTC assumed)
+    filetime : datetime.datetime
+        Timestamp (mtime) of the leapsecond file
+    lastleap : datetime.datetime
+        Last leapsecond in the file (really the moment after the leap)
+
+    Returns
+    -------
+    bool
+        True if leap second file is up-to-date, False if might not be.
+    """
+    # There cannot be a leap second until AFTER the ls after the
+    # bulletin (e.g. once past 1 Jan, know the next possible is next 1 Jan)
+    goodto_mtime = datetime.datetime(
+        filetime.year + 1, 7 if filetime.month > 6 else 1, 1)
+    # The next possible leapsecond is 6mo after the previous known leap,
+    # which is (technically just before) 1 Jan or 1 July
+    goodto_ls = datetime.datetime(
+        lastleap.year + int(lastleap.month > 6),
+        1 if lastleap.month > 6 else 7, 1)
+    goodto = max(goodto_ls, goodto_mtime)
+    return now < goodto
+
+
+def _read_leaps(oldstyle=False):
     """Read leapseconds in from spacepy tai-utc file
 
     Populates module-global variables with leapsecond information:
     secs, year, mon, day, TAIleaps.
-    Called on first initialization of Ticktock.
+    Called on import of this module.
+
+    Other Parameters
+    ----------------
+    oldstyle : bool
+
+        .. versionadded:: 0.2.3
+
+        Treat leapseconds as in SpacePy 0.2.2 (default False). Default is
+        to ignore the file contents through 1 Jan 1972 and use SpacePy's own
+        list of integral leapseconds, which uses the post-1972 standard
+        (add a leapsecond on January 1/July 1 if UTC - UT1 > 0.4s).
     """
     global secs, year, mon, day, TAIleaps
     # load current file
     fname = os.path.join(spacepy.DOT_FLN, 'data', 'tai-utc.dat')
-    with open(fname) as fh:
-        text = fh.readlines()
+    try:
+        with open(fname) as fh:
+            text = fh.readlines()
+        mtime = datetime.datetime(*time.gmtime(os.path.getmtime(fname))[:6])
+    except IOError:
+        warnings.warn('Cannot read leapsecond file. Use'
+                      ' spacepy.toolbox.update(leapsecs=True).')
+        text = [] # Use built-in pre-1972 leaps
+        mtime = None
     # Some files have a "last checked" line at the top
-    if text[0].startswith('Checked'):
+    if text and text[0].startswith('Checked'):
         del text[0]
 
+    months = np.array(['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+                       'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'])
+
+    if not oldstyle: # Use internal integral leapsecond count until 1972
+        keep_idx = next((i for i, l in enumerate(text)
+                         if int(l[:5]) > 1972
+                         or int(l[:5]) == 1972 and l[6:9] == 'JUL'), len(text))
+        leaps = [(1959, 1, 36569), (1961, 1, 37300), (1963, 7, 38211),
+                 (1965, 1, 38761), (1966, 7, 39307), (1967, 7, 39672),
+                 (1968, 7, 40038), (1969, 7, 40403), (1970, 7, 40768),
+                 (1971, 7, 41133)]
+        # 1972 Jan NOT a leapsecond in this formulation; TAI-UTC=10s at 71 Jul
+        text = [
+            ' {Y} {M}  1 =JD {JD}  TAI-UTC={L:12.7f} S '
+            '+ (MJD - 00000.) X 0.0000000 S   ACTUAL\n'.format(
+                Y=l[0], M=months[l[1] - 1], JD=l[2] + 2400000.5, L=i + 1)
+            for i, l in enumerate(leaps)] \
+                + text[keep_idx:]
     secs = np.zeros(len(text))
     year = np.zeros(len(text))
     mon = np.zeros(len(text))
     day = np.zeros(len(text))
-
-    months = np.array(['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
-                       'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'])
 
     for line, i in zip(text, np.arange(len(secs))):
         # Round float seconds (0.5 always rounds up.)
@@ -2276,6 +2354,16 @@ def _read_leaps():
         year[i] = int(line.split()[0])
         mon[i] = int(np.where(months == line.split()[1])[0][0] + 1)
         day[i] = int(line.split()[2])
+
+    # Check for out of date. The leap second bulletin comes every
+    # six months, and that contains information through the following
+    # leap second (end of June/Dec)
+    if mtime is not None and spacepy.config['enable_old_data_warning'] \
+       and not _leapsgood(
+           datetime.datetime.utcnow(), mtime,
+           datetime.datetime(int(year[-1]), int(mon[-1]), int(day[-1]))):
+            warnings.warn('Leapseconds may be out of date.'
+                          ' Use spacepy.toolbox.update(leapsecs=True)')
 
     TAIleaps = np.zeros(len(secs))
     TAItup = [''] * len(secs)
@@ -2469,13 +2557,13 @@ def _days1958totai(days, leaps='rubber', midnight=False):
     # Seconds from the start of naive day.
     ssd = (days - dayint) * daylen # Mod does wrong thing if negative
     # Index TAIUTC for every input. Start of day w/LS is still previous value.
-    taiutcidx = ldidx - np.require(leap_sec_day, dtype=np.intc)
+    taiutcidx = ldidx - np.require(leap_sec_day, dtype=np.intp)
     # Keep small number adds together: ssd and leapseconds.
     taiout = daystart + (ssd + off + taiutc[taiutcidx])
     if leaps == 'drop':
         # Any times after leap-second skip need an extra second.
         taiutcidx += np.require(leap_sec_day & (taiout >= leap_tai[ldidx]),
-                                dtype=np.integer)
+                                dtype=np.intp)
         # Recalculate to keep small-number addition together
         taiout = daystart + (ssd + off + taiutc[taiutcidx])
     return taiout

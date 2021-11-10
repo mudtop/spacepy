@@ -30,6 +30,7 @@ except: # Don't bring down whole test suite
     HAVE_ASTROPY = False
 import numpy
 
+import spacepy_testing
 import spacepy
 import spacepy.pycdf
 import spacepy.time as t
@@ -130,17 +131,13 @@ class TimeFunctionTests(unittest.TestCase):
                     [0, 0, 1],
                     [0, 0, 30],
                     [0, 59, 59])
-        with warnings.catch_warnings(record=True) as w:
-            warnings.filterwarnings(
-                'always', 'Number of seconds > seconds in day.*',
-                UserWarning, '^spacepy\\.time')
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'Number of seconds > seconds in day\. Try days keyword\.$',
+                UserWarning, r'spacepy\.time$'):
             for i, val in enumerate(inval):
                 ans = t.sec2hms(*val)
                 self.assertEqual(real_ans[i], ans)
-        self.assertEqual(1, len(w))
-        self.assertEqual(
-            'Number of seconds > seconds in day. Try days keyword.',
-            str(w[0].message))
         self.assertEqual(t.sec2hms(12, False, False, True), datetime.timedelta(seconds=12))
 
     def test_no_tzinfo(self):
@@ -391,8 +388,11 @@ class TimeFunctionTests(unittest.TestCase):
             -31514400.,# 1957-01-01 06:00:00
             0.,        # 1958-01-01 00:00:00
             43200,     # 1958-01-01 12:00:00
-            126230400, # 1961-12-31 23:59:59
-            126230401, # 1961-12-31 23:59:60
+            94694400,  # 1960-12-31 23:59:59
+            94694401,  # 1960-12-31 23:59:60
+            94694402,  # 1961-01-01 00:00:00
+            126230400, # 1961-12-31 23:59:58
+            126230401, # 1961-12-31 23:59:59
             126230402, # 1962-01-01 00:00:00
             126316802, # 1962-01-02 00:00:00
             1609459232,# 2008-12-31 23:59:59
@@ -405,9 +405,12 @@ class TimeFunctionTests(unittest.TestCase):
             -365.25,
             -0.5,
             0,
-            1460 + 43199. / 86401,
-            1460 + 43200. / 86401,
-            1460 + 43201. / 86401,
+            1095 + 43199. / 86401,
+            1095 + 43200. / 86401,
+            1095 + 43201. / 86401,
+            1460 + 43198. / 86400,
+            1460 + 43199. / 86400,
+            1460.5,
             1461.5,
             18627. + 43199. / 86401,
             18627. + 43200. / 86401,
@@ -421,8 +424,11 @@ class TimeFunctionTests(unittest.TestCase):
             -365.25,
             -0.5,
             0,
+            1095 + 43199. / 86400,
+            1095 + 43199.999999 / 86400,
+            1095.5,
+            1460 + 43198. / 86400,
             1460 + 43199. / 86400,
-            1460 + 43199.999999 / 86400,
             1460.5,
             1461.5,
             18627. + 43199. / 86400,
@@ -437,6 +443,9 @@ class TimeFunctionTests(unittest.TestCase):
             -365.25,
             -0.5,
             0,
+            1095.5,
+            1095.5 + 1. / 86400,
+            1095.5 + 2. / 86400,
             1460.5,
             1460.5 + 1. / 86400,
             1460.5 + 2. / 86400,
@@ -470,8 +479,11 @@ class TimeFunctionTests(unittest.TestCase):
             -31514400.,# 1957-01-01 06:00:00
             0.,        # 1958-01-01 00:00:00
             43200,     # 1958-01-01 12:00:00
-            126230400, # 1961-12-31 23:59:59
-            126230401, # 1961-12-31 23:59:60
+            94694400,  # 1960-12-31 23:59:59
+            94694401,  # 1960-12-31 23:59:60
+            94694402,  # 1961-01-01 00:00:00
+            126230400, # 1961-12-31 23:59:58
+            126230401, # 1961-12-31 23:59:59
             126230402, # 1962-01-01 00:00:00
             126316802, # 1962-01-02 00:00:00
             1609459232,# 2008-12-31 23:59:59
@@ -484,8 +496,11 @@ class TimeFunctionTests(unittest.TestCase):
             -364.75,
             0.,
             0.5,
-            1460 + 86399. / 86401,
-            1460 + 86400. / 86401,
+            1095 + 86399. / 86401,
+            1095 + 86400. / 86401,
+            1095 + 86401. / 86401,
+            1460 + 86398. / 86400,
+            1460 + 86399. / 86400,
             1461,
             1462,
             18627. + 86399. / 86401,
@@ -503,8 +518,11 @@ class TimeFunctionTests(unittest.TestCase):
             -364.75,
             0.,
             0.5,
+            1095 + 86399. / 86400,
+            1095 + 86399.999999 / 86400,
+            1096,
+            1460 + 86398. / 86400,
             1460 + 86399. / 86400,
-            1460 + 86399.999999 / 86400,
             1461,
             1462,
             18627. + 86399. / 86400,
@@ -522,6 +540,9 @@ class TimeFunctionTests(unittest.TestCase):
             -364.75,
             0.,
             0.5,
+            1096,
+            1096 + 1. / 86400,
+            1096 + 2. / 86400,
             1461,
             1461 + 1. / 86400,
             1461 + 2. / 86400,
@@ -544,8 +565,11 @@ class TimeFunctionTests(unittest.TestCase):
             -31514400.,# 1957-01-01 06:00:00
             0.,        # 1958-01-01 00:00:00
             43200,     # 1958-01-01 12:00:00
-            126230400, # 1961-12-31 23:59:59
-            126230401, # 1961-12-31 23:59:60
+            94694400,  # 1960-12-31 23:59:59
+            94694401,  # 1960-12-31 23:59:60
+            94694402,  # 1961-01-01 00:00:00
+            126230400, # 1961-12-31 23:59:58
+            126230401, # 1961-12-31 23:59:59
             126230402, # 1962-01-01 00:00:00
             126316802, # 1962-01-02 00:00:00
             1609459232,# 2008-12-31 23:59:59
@@ -558,9 +582,12 @@ class TimeFunctionTests(unittest.TestCase):
             -365.25,
             -0.5,
             0,
-            1460 + 43199. / 86401,
-            1460 + 43200. / 86401,
-            1460 + 43201. / 86401,
+            1095 + 43199. / 86401,
+            1095 + 43200. / 86401,
+            1095 + 43201. / 86401,
+            1460 + 43198. / 86400,
+            1460 + 43199. / 86400,
+            1460.5,
             1461.5,
             18627. + 43199. / 86401,
             18627. + 43200. / 86401,
@@ -574,8 +601,11 @@ class TimeFunctionTests(unittest.TestCase):
             -365.25,
             -0.5,
             0,
+            1095 + 43199. / 86400,
+            1095 + 43199.999999 / 86400,
+            1095.5,
+            1460 + 43198. / 86400,
             1460 + 43199. / 86400,
-            1460 + 43199.999999 / 86400,
             1460.5,
             1461.5,
             18627. + 43199. / 86400,
@@ -590,6 +620,9 @@ class TimeFunctionTests(unittest.TestCase):
             -365.25,
             -0.5,
             0,
+            1095.5,
+            1095.5 + 1. / 86400,
+            1095.5 + 2. / 86400,
             1460.5,
             1460.5 + 1. / 86400,
             1460.5 + 2. / 86400,
@@ -626,8 +659,11 @@ class TimeFunctionTests(unittest.TestCase):
             -31514400.,# 1957-01-01 06:00:00
             0.,        # 1958-01-01 00:00:00
             43200,     # 1958-01-01 12:00:00
-            126230400, # 1961-12-31 23:59:59
-            126230401, # 1961-12-31 23:59:60
+            94694400,  # 1960-12-31 23:59:59
+            94694401,  # 1960-12-31 23:59:60
+            94694402,  # 1961-01-01 00:00:00
+            126230400, # 1961-12-31 23:59:58
+            126230401, # 1961-12-31 23:59:59
             126230402, # 1962-01-01 00:00:00
             126316802, # 1962-01-02 00:00:00
             1609459232,# 2008-12-31 23:59:59
@@ -637,18 +673,21 @@ class TimeFunctionTests(unittest.TestCase):
             ]
 
         inputs = [
-            -364.75,
+           -364.75,
             0.,
             0.5,
-            1460 + 86399. / 86401,
-            1460 + 86400. / 86401,
+            1095 + 86399. / 86401,
+            1095 + 86400. / 86401,
+            1095 + 86401. / 86401,
+            1460 + 86398. / 86400,
+            1460 + 86399. / 86400,
             1461,
             1462,
             18627. + 86399. / 86401,
             18627. + 86400. / 86401,
             18628.,
             18628. + 1. / 86400,
-            ]
+             ]
         actual = t._days1958totai(inputs, leaps='rubber', midnight=True)
         numpy.testing.assert_almost_equal(expected, actual, decimal=6)
         self.assertEqual(
@@ -659,8 +698,11 @@ class TimeFunctionTests(unittest.TestCase):
             -364.75,
             0.,
             0.5,
+            1095 + 86399. / 86400,
+            1095 + 86399.999999 / 86400,
+            1096,
+            1460 + 86398. / 86400,
             1460 + 86399. / 86400,
-            1460 + 86399.999999 / 86400,
             1461,
             1462,
             18627. + 86399. / 86400,
@@ -678,6 +720,9 @@ class TimeFunctionTests(unittest.TestCase):
             -364.75,
             0.,
             0.5,
+            1096,
+            1096 + 1. / 86400,
+            1096 + 2. / 86400,
             1461,
             1461 + 1. / 86400,
             1461 + 2. / 86400,
@@ -695,6 +740,8 @@ class TimeFunctionTests(unittest.TestCase):
 
 
 class TimeClassTests(unittest.TestCase):
+
+    longMessage = True
 
     def test_TAIinit(self):
         """test that Ticktock can be made from TAI input"""
@@ -1036,20 +1083,18 @@ class TimeClassTests(unittest.TestCase):
         t0 = 1663236947
         range_ex = list(numpy.linspace(t0, t0 + 4000, 4))
         # make a TAI that is a leapsecond time
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=DeprecationWarning)
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'now\(\) returns UTC time as of 0\.2\.2\.$',
+                DeprecationWarning, r'spacepy\.time$'):
             tt2 = t.Ticktock.now()
-        self.assertEqual(1, len(w))
-        self.assertEqual(w[0].category, DeprecationWarning)
-        self.assertEqual(
-            'now() returns UTC time as of 0.2.2.',
-            str(w[0].message))
         tt2tai = tt2.TAI
         taileaps = tt2.TAIleaps
-        range_ex.append(taileaps[39] - 1)
-        range_ex.append(taileaps[39])
-        range_ex.append(taileaps[39] + 1)
-        range_ex.append(taileaps[38])
+        # Get the TAI at the 2015 and 2012 leap seconds
+        range_ex.append(taileaps[35] - 1)
+        range_ex.append(taileaps[35])
+        range_ex.append(taileaps[35] + 1)
+        range_ex.append(taileaps[34])
         tt = t.Ticktock(range_ex, 'TAI')
         ans = ['2010-09-15T10:15:13', '2010-09-15T10:37:26', '2010-09-15T10:59:39',
                '2010-09-15T11:21:53',
@@ -1201,7 +1246,7 @@ class TimeClassTests(unittest.TestCase):
                                   -320., -100841., -100840.,
                                   37299.5 + 43201. / 86401,
                                   41316.,
-                                  41316.5 + 43201. / 86401])
+                                  41317])
         numpy.testing.assert_almost_equal(t1.MJD, expected)
 
     def test_MJDLeapsecond(self):
@@ -1381,29 +1426,26 @@ class TimeClassTests(unittest.TestCase):
 
     def test_now(self):
         """now() is at least deterministic"""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=DeprecationWarning)
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'now\(\) returns UTC time as of 0\.2\.2\.$',
+                DeprecationWarning, r'spacepy\.time$'):
             v1 = t.Ticktock.now()
-            time.sleep(0.1)
+        time.sleep(0.1)
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'now\(\) returns UTC time as of 0\.2\.2\.$',
+                DeprecationWarning, r'spacepy\.time$'):
             v2 = t.Ticktock.now()
-        self.assertEqual(2, len(w))
-        for i in (0, 1):
-            self.assertEqual(w[i].category, DeprecationWarning)
-            self.assertEqual(
-                'now() returns UTC time as of 0.2.2.',
-                str(w[i].message))
         self.assertTrue(v1 < v2)
 
     def test_today(self):
         """today() has 0 time"""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=DeprecationWarning)
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'today\(\) returns UTC day as of 0\.2\.2\.$',
+                DeprecationWarning, r'spacepy\.time$'):
             v1 = t.Ticktock.today()
-        self.assertEqual(1, len(w))
-        self.assertEqual(w[0].category, DeprecationWarning)
-        self.assertEqual(
-            'today() returns UTC day as of 0.2.2.',
-            str(w[0].message))
         self.assertEqual(v1.UTC[0].hour, 0)
         self.assertEqual(v1.UTC[0].minute, 0)
         self.assertEqual(v1.UTC[0].second, 0)
@@ -1485,35 +1527,51 @@ class TimeClassTests(unittest.TestCase):
             datetime.datetime(1964, 1, 1),
             datetime.datetime(1965, 3, 1)], dtype='UTC')
         numpy.testing.assert_equal(
-            [0, 0, 1, 3, 4], t1.getleapsecs())
+            [0, 1, 2, 3, 4], t1.getleapsecs())
 
     def test_readleapsecs(self):
         """Test that the leap second file was properly read"""
         numpy.testing.assert_equal(
-            [1, 1, 2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 10],
-            spacepy.time.secs[:14])
+            numpy.arange(12) + 1, spacepy.time.secs[:12])
         # The date in the file (the moment after the leapsecond, i.e.
         # the first time where the TAI-UTC changes).
-        expected = [(1961, 1, 1),
-                    (1961, 8, 1),
-                    (1962, 1, 1),
-                    (1963, 11, 1),
-                    (1964, 1, 1),
-                    (1964, 4, 1),
-                    (1964, 9, 1),
+        expected = [(1959, 1, 1),
+                    (1961, 1, 1),
+                    (1963, 7, 1),
                     (1965, 1, 1),
-                    (1965, 3, 1),
-                    (1965, 7, 1),
-                    (1965, 9, 1),
-                    (1966, 1, 1),
-                    (1968, 2, 1),
-                    (1972, 1, 1)]
+                    (1966, 7, 1),
+                    (1967, 7, 1),
+                    (1968, 7, 1),
+                    (1969, 7, 1),
+                    (1970, 7, 1),
+                    (1971, 7, 1),
+                    (1972, 7, 1),
+                    (1973, 1, 1)]
         actual = [(int(y), int(m), int(d))
-                  for y, m, d in zip(t.year, t.mon, t.day)][:14]
+                  for y, m, d in zip(t.year, t.mon, t.day)][:12]
         numpy.testing.assert_equal(expected, actual)
 
+    def test_leapsgood(self):
+        """Test the check for out-of-date leapseconds"""
+        # Each case is current time, file mtime, lastleap, leapsgood (or not)
+        # Last leap must be july or january
+        cases = [[(2021, 1, 5), (2020, 12, 26), (2017, 1, 1), True],
+                 [(2021, 7, 5), (2020, 12, 26), (2017, 1, 1), False],
+                 [(2021, 7, 5), (2020, 12, 26), (2020, 7, 1), False],
+                 [(2021, 7, 5), (2020, 12, 26), (2021, 7, 1), True],
+                 [(2020, 12, 26), (2020, 12, 24), (2017, 1, 1), True],
+                 [(2018, 6, 2), (2018, 5, 12), (2017, 1, 1), True],
+                 [(2018, 6, 2), (2017, 5, 12), (2017, 1, 1), False],
+                 [(2017, 6, 2), (2017, 5, 12), (2017, 1, 1), True],
+                 ]
+        for caseno, caseinfo in enumerate(cases):
+            currtime, filetime, lastleap, isgood = caseinfo
+            self.assertEqual(isgood, t._leapsgood(
+                datetime.datetime(*currtime), datetime.datetime(*filetime),
+                datetime.datetime(*lastleap)), 'Case {}'.format(caseno))
+
     def test_diffAcrossLeaps(self):
-        """Do TAI differences across the first leapsecond"""
+        """Do TAI differences across leapseconds"""
         t1 = t.Ticktock([
             datetime.datetime(1960, 12, 31, 23, 59, 58),
             # 1 normal second in between
@@ -1525,6 +1583,15 @@ class TimeClassTests(unittest.TestCase):
         numpy.testing.assert_equal(
             [1, 2, 1], numpy.diff(t1.TAI))
 
+    def testLeapCount(self):
+        """Check leap-second counts (TAI-UTC) at various times"""
+        t1 = t.Ticktock([datetime.datetime(*dt) for dt in (
+            (1958, 1, 1), (1959, 1, 1), (1961, 1, 1),
+            (1971, 12, 31), (1972, 1, 1), (1982, 7, 1),
+        )], dtype='UTC')
+        numpy.testing.assert_equal(
+            [0, 1, 2, 10, 10, 21], t1.leaps)
+
     def testTAIBase(self):
         """Test the baseline of TAI"""
         t1 = t.Ticktock([
@@ -1532,7 +1599,8 @@ class TimeClassTests(unittest.TestCase):
             datetime.datetime(1961, 1, 1)], dtype='UTC')
         numpy.testing.assert_equal(
             [0, # Start epoch.
-             (3 * 365 + 1) * 86400 + 1, # 1958, 1959, 1960 (leap) + 1 second
+             # 1958, 1959, 1960 (leap year) + leap seconds 1959 and 1961
+             (3 * 365 + 1) * 86400 + 2,
              ],
             t1.TAI)
 
@@ -1636,14 +1704,12 @@ class TimeClassTests(unittest.TestCase):
             datetime.datetime(2001, 1, 1),
             tt.UTC[0])
         tt.data[0] = '2002-01-01'
-        with warnings.catch_warnings(record=True) as w:
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'cls argument of update_items was deprecated in 0\.2\.2'
+                r' and will be ignored\.$',
+                DeprecationWarning, r'spacepy\.time$'):
             tt.update_items(type(tt), 'data')
-        self.assertEqual(1, len(w))
-        self.assertEqual(w[0].category, DeprecationWarning)
-        self.assertEqual(
-            'cls argument of update_items was deprecated in 0.2.2'
-            ' and will be ignored.',
-            str(w[0].message))
         self.assertEqual(
             datetime.datetime(2002, 1, 1),
             tt.UTC[0])

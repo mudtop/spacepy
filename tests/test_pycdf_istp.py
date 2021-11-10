@@ -13,6 +13,7 @@ import warnings
 
 import numpy
 import numpy.testing
+import spacepy_testing
 import spacepy
 import spacepy.pycdf
 import spacepy.pycdf.const
@@ -286,7 +287,8 @@ class VariablesTests(ISTPTestsBase):
     def testValidRangeFillvalDatetime(self):
         """Validmin/validmax with fillval set, Epoch var"""
         v = self.cdf.new(
-            'var1', data=[datetime.datetime(2010, 1, i) for i in range(1, 6)])
+            'var1', data=[datetime.datetime(2010, 1, i) for i in range(1, 6)],
+            type=spacepy.pycdf.const.CDF_EPOCH)
         v.attrs['VALIDMIN'] = datetime.datetime(2010, 1, 1)
         v.attrs['VALIDMAX'] = datetime.datetime(2010, 1, 31)
         v.attrs['FILLVAL'] = datetime.datetime(9999, 12, 31, 23, 59, 59, 999000)
@@ -727,7 +729,9 @@ class FileTests(ISTPTestsBase):
 
     def testTimesMonoton(self):
         """Test monotonic time"""
-        self.cdf['Epoch'] = [datetime.datetime(1999, 1, 1, i) for i in range(3)]
+        self.cdf.new('Epoch',
+                     data=[datetime.datetime(1999, 1, 1, i) for i in range(3)],
+                     type=spacepy.pycdf.const.CDF_EPOCH)
         self.cdf['Epoch'].append(datetime.datetime(1999, 1, 1, 5))
         self.cdf['Epoch'].append(datetime.datetime(1999, 1, 1, 4))
         errs = spacepy.pycdf.istp.FileChecks.time_monoton(self.cdf)
@@ -857,8 +861,8 @@ class VarBundleChecksBase(unittest.TestCase):
             self.tempdir, 'source_descriptor_datatype_19990101_v00.cdf'),
                                      create=True)
         spacepy.pycdf.lib.set_backward(True)
-        pth = os.path.dirname(os.path.abspath(__file__))
-        self.incdf = spacepy.pycdf.CDF(os.path.join(pth, self.testfile))
+        self.incdf = spacepy.pycdf.CDF(os.path.join(
+            spacepy_testing.testsdir, self.testfile))
 
     def tearDown(self):
         """Close CDFs; delete output"""
@@ -1077,9 +1081,11 @@ class VarBundleChecks(VarBundleChecksBase):
         bundle = spacepy.pycdf.istp.VarBundle(
             self.incdf['SectorRateScalersCounts'])
         bundle.slice(1, [2, 3, 5])
-        with warnings.catch_warnings(record=True) as w:
+        with spacepy_testing.assertDoesntWarn(
+                self, 'always',
+                r'Using a non-tuple sequence for multidimensional indexing',
+                FutureWarning, r'spacepy\.pycdf\.istp$'):
             bundle.output(self.outcdf)
-        self.assertEqual(0, len(w)) #verify no deprecation warning
         numpy.testing.assert_array_equal(
             self.outcdf['SectorRateScalersCounts'][...],
             self.incdf['SectorRateScalersCounts'][...][:, [2, 3, 5], ...])
@@ -1194,14 +1200,19 @@ class VarBundleChecks(VarBundleChecksBase):
         counts = self.incdf['SectorRateScalersCounts'][...]
         counts[counts < 0] = numpy.nan
         #suppress bad value warnings
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                'ignore', 'Mean of empty slice', RuntimeWarning)
             expected = numpy.nanmean(counts, axis=2)
         expected[numpy.isnan(expected)] = -1e31
         numpy.testing.assert_allclose(
             expected, self.outcdf['SectorRateScalersCounts'][...])
         sigma = self.incdf['SectorRateScalersCountsSigma'][...]
         sigma[sigma < 0] = numpy.nan
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                'ignore', r'invalid value encountered in (?:true_)divide$',
+                RuntimeWarning)
             expected = numpy.sqrt(numpy.nansum(sigma ** 2, axis=2)) \
                         / (~numpy.isnan(sigma)).sum(axis=2)
         expected[numpy.isnan(expected)] = -1e31
