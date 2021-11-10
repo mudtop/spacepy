@@ -2,6 +2,8 @@
 #top-level docs
 include INSTALL
 include CHANGELOG
+# Defining build requirements (numpy)
+include pyproject.toml
 #Sphinx docs and source
 graft Doc/build/html
 include Doc/Makefile
@@ -18,6 +20,8 @@ include spacepy/pybats/ctrace2dtest.c
 #Tests
 graft tests
 prune tests/htmlcov
+#Scripts. Not installing right now but handy
+include scripts/*.py
 #Cruft to keep out
 recursive-exclude * *.o *.pyc *~ *.bak
 recursive-exclude spacepy realtime.*
