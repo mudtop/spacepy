@@ -616,13 +616,14 @@ class RamSat(SpaceData):
         omnikeys = [('omni{0}'.format(get_species_label(kk)), kk)
                     for kk in self if get_species_label(kk) is not None]
         # Create delta mu, where mu = cos(pitch angle)
-        if 'pa_width' not in self:
-            # if "pa_width" absent, calculate...
-            # assume bin width for zeroth bin is same as first,
-            # and that zeroth PA is zero.
-            grdif = np.diff(self['pa_grid'])
-            self['pa_width'] = dmarray(np.r_[grdif[0], grdif])
-        dMu = 4*np.pi*self['pa_width']
+        dMu = np.zeros(nPa)
+        if 'pa_width' in self:
+            dMu=4*np.pi*self['pa_width']
+        else:
+            dMu[0] = self['pa_grid'][1]
+            for i in range(1,nPa):
+                # Factor of pi here so we don't need it later.
+                dMu[i] = 4*np.pi*self['pa_grid'][i] -self['pa_grid'][i-1]
 
         for omkey, fluxkey in omnikeys:
             self[omkey] = np.zeros((nTime, nEner))
@@ -714,7 +715,9 @@ class RamSat(SpaceData):
              A matplotlib-compatable line format specifier, e.g., 'b-'.
              Defaults to 'g.', or green dots.
         """
-        if not plane.upper() in ('XY', 'XZ', 'YZ'):
+        import matplotlib.pyplot as plt
+
+        if not plane.upper() in ('XY','XZ','YZ'):
             raise ValueError("{0} is not a valid plot plane.".format(plane))
 
         fig, ax = set_target(target, loc=loc, figsize=(5, 5))
@@ -1511,14 +1514,15 @@ class BoundaryFluxFile(object):
         egrid = np.array(range(self.nE))
         flux = self.flux.transpose()
         flux[flux<0.01] = 0.01
-        flx = ax.pcolor(self.LT, egrid, flux, norm=LogNorm(), vmin=zlim[0],
-                        vmax=zlim[-1], cmap=plt.get_cmap('inferno'))
+        flx = ax.pcolor(self.LT, egrid, flux, norm=LogNorm(vmin=zlim[0],
+                        vmax=zlim[-1]), cmap=plt.get_cmap('inferno'),
+                        shading='auto')
         cbar = plt.colorbar(flx, pad=0.01, shrink=0.85, ticks=LogLocator(),
                             format=LogFormatterMathtext())
         cbar.set_label('$cm^{-2}s^{-1}ster^{-1}keV^{-1}$')
         ax.set_xlim([0, 24])
         ax.set_ylim([0, self.nE-1])
-        if self.time:
+        if hasattr(self, 'time'):
             ax.set_title(self.time.isoformat())
         ax.set_xlabel('Local Time Sector')
         if hasattr(self, 'E'):
@@ -1528,7 +1532,12 @@ class BoundaryFluxFile(object):
                 newlabs.append('%6.2f' % self.E[int(val)])
             ax.set_yticklabels(newlabs)
         else:
-            ax.set_ylabel('Energy Bin')
+            ecentr, ebound, ewidth = gen_egrid(self.nE)
+            ax.set_ylabel('Energy (keV)')
+            newlabs = []
+            for val in ax.get_yticks()[:-1]:
+                newlabs.append('%6.2f' % ecentr[int(val)])
+            ax.set_yticklabels(newlabs)
 
         return fig, ax
 
@@ -1669,6 +1678,44 @@ class LogFile(PbData):
             ax.legend(loc='best')
 
         return fig, ax
+
+############################################################################
+def read_ram_dst(infile):
+    '''
+    A function to quickly read a RAM-SCB dst file as prepared during
+    the post-processing step of a simulation.
+    It currently returns a list of datetime objects and a numpy array
+    of dst values (species-specific dst values are discarded.)
+    Example: (time, dst) = read_ram_dst('dst_d20050831_t090000.txt')
+
+    This function is a candidate for removal as more efficient ways
+    of saving Dst from RAM_SCB are devised.
+    '''
+
+    raise DeprecationWarning('This function acts on files no longer written '+
+                             'by RAM-SCB')
+
+    f = open(infile, 'r')
+    lines = f.readlines()
+    f.close()
+
+    lines.pop(0) # Remove header.
+    npoints = len(lines)
+    time = []
+    dst = np.zeros(npoints)
+
+    for i, line in enumerate(lines):
+        parts = line.split()
+        time.append(dt.datetime(int(parts[0][1:5]),   #year
+                                int(parts[0][5:7]),   #month
+                                int(parts[0][7:9]),   #day
+                                int(parts[0][11:13]), #hour
+                                int(parts[0][13:15]), #min
+                                int(parts[0][15:17])) #sec
+                    )
+        dst[i] = float(parts[-1]) * 1.3
+
+    return(time, dst)
 
 ############################################################################
 class IonoPotScb(object):
